@@ -3,7 +3,7 @@
 **Status: approved (v1), 2026-11-13, at the milestone 1 review.** Nothing here is built yet. Agent milestone 5c (collector transport) is built against this document. Changes from here on are recorded as decisions (M-xxx) and keep `/api/v1`; a breaking change needs `/api/v2`.
 
 - Requirements: MS-ING-01 to MS-ING-11 (MS-ING-11 added at the review, M-018), plus MS-SEC-01..03, MS-SEC-10, MS-OPS-08. Agent side: AG-SEC-03/04/07, AG-DAT-01..04, AG-PRF-04/06, AG-CFG-01..03, AG-INV-16.
-- Decisions: M-001 to M-023 in [decisions.md](decisions.md); the review answers are M-017. Values still open (MPD-20, MPD-25 to MPD-29) are in [pending-decisions.md](pending-decisions.md), each with a recommendation.
+- Decisions: M-001 to M-028 in [decisions.md](decisions.md); the review answers are M-017 and M-024 to M-028. Values still open (MPD-29 to MPD-31) are in [pending-decisions.md](pending-decisions.md), each with a recommendation.
 - Agent sources read for this contract (agent repo, `master`, 2026-11-13): `docs/status.md`, `docs/decisions.md` (D-004, D-008, D-016, D-039, D-060, D-071, D-073), `docs/agent-requirements.md`, `internal/config/identity.go`, `internal/output/jsonfile.go`, the record structs in `internal/netcollect`, `internal/proc` and `internal/inventory`.
 
 ## 1. Overview
@@ -16,7 +16,7 @@
 | `/api/v1/config` | GET | required | The agent's settings for its host group | MS-ING-07 |
 | `/api/v1/renew` | POST | required | New certificate before the current one expires | MS-ING-11 (Should), M-018 |
 
-- **Base URL:** `https://<collector>:8443`. The name is `aio-mothership.<your-domain>` *(confirm, MPD-20)*. Port 8443 serves agents only; the dashboard is on 443.
+- **Base URL:** `https://<mothership-ip>:8443`. There is no DNS name: agents and browsers use the mothership's fixed IP on 192.168.0.0/24, set when the VM is built (M-024). `<mothership-ip>` is a placeholder until then. Port 8443 serves agents only; the dashboard is on 443.
 - **TLS:** **1.3 only on 8443** (M-019, MS-SEC-01); every agent is Go, which supports it. Port 443 keeps 1.2 or later for browsers. ECDHE with AEAD ciphers only.
 - **Server certificate on 8443:** issued by the private **agent CA**, which the agent pins (AG-SEC-04). The agent never trusts the Windows certificate store for 8443. See §2.4 and M-002.
 - **Client certificate:** Apache asks for one on every connection to 8443 (`SSLVerifyClient optional`, `SSLVerifyDepth 1`, CA = agent CA). `/api/v1/enroll` works without one; every other endpoint returns 401 without a valid one (M-001).
@@ -30,7 +30,7 @@
 ### 2.1 Flow
 
 1. **An admin creates an enrolment token** (admin page in milestone 5, CLI script `bin/token-create.php` in milestone 3). It is shown once and stored only as its SHA-256 hash (MS-SEC-03). The token can be tied to a host group, and optionally to an expected hostname and a re-enrolment agent ID (§2.5). Each token is single-use and one of two kinds (M-021): **`manual`**, typed by hand, valid 24 h; or **`deployment`**, put into an Intune or GPO package, valid up to 7 days (chosen when it is made) and marked as such on the admin page.
-2. **The installer gets** the collector address, the token, and the agent CA certificate (or its SHA-256 fingerprint) as MSI properties (AG-PLT-04; how the CA travels is M-002).
+2. **The installer gets** the collector address (the mothership's IP, M-024), the token, and the agent CA certificate (or its SHA-256 fingerprint) as MSI properties (AG-PLT-04; how the CA travels is M-002).
 3. **The agent creates its key pair** locally (§2.3). The private key never leaves the host. 5c stores it in the protected data folder, encrypted with DPAPI (AG-SEC-06).
 4. **The agent sends** `POST /api/v1/enroll` with the token and a CSR whose subject CN is its `agent_id`. It first checks that the server's certificate chains to the pinned agent CA. It never sends a token to a server it hasn't verified.
 5. **The mothership checks**, in one database transaction:
@@ -85,7 +85,9 @@
 
 The CSR's own signature must verify. `agent_id` must be a lower-case UUID version 4 (the agent's D-004 format, `^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`).
 
-**The server certificate for 8443** comes from the same agent CA, with `serverAuth`, the collector's DNS name and fixed IP as SANs, and a 1-year lifetime *(confirm, MPD-29)*. One pinned CA then covers both directions (M-002).
+**The server certificate for 8443** comes from the same agent CA, with `serverAuth` and the mothership's fixed IP as its only SAN (an `iPAddress` entry; no DNS name, M-024), and a 1-year lifetime *(confirm, MPD-29)*. One pinned CA then covers both directions (M-002).
+
+**Addressing by IP (M-024):** the agent connects to the IP and checks it against the certificate's `iPAddress` SAN (Go does this for an IP host). A client sends no SNI for an IP, so Apache picks the vhost by port alone: one vhost on 8443 (agent CA) and one on 443 (web CA). **Changing the mothership's IP** means reissuing both server certificates and changing the collector address on every agent, so the IP is treated as permanent once agents are enrolled.
 
 ### 2.4 How a request is authenticated (MS-ING-02, MS-SEC-02)
 
@@ -307,7 +309,7 @@ Each heartbeat updates the agent's check-in time, version and IP (MS-ING-08) and
 
 ```http
 GET /api/v1/config HTTP/1.1
-Host: aio-mothership.example.internal:8443
+Host: <mothership-ip>:8443
 User-Agent: aio-monitor-agent/0.5.0
 If-None-Match: "cfg-3-6"
 ```
@@ -349,7 +351,7 @@ These use `curl` with a client certificate, as the simulator and tests will. Rea
 
 ```http
 POST /api/v1/enroll HTTP/1.1
-Host: aio-mothership.example.internal:8443
+Host: <mothership-ip>:8443
 Content-Type: application/json
 User-Agent: aio-monitor-agent/0.5.0
 
@@ -389,7 +391,7 @@ gzip -c batch.jsonl > batch.jsonl.gz
 curl --cert agent.crt --key agent.key --cacert agent-ca.crt \
   -H 'Content-Type: application/x-ndjson' -H 'Content-Encoding: gzip' \
   -H 'User-Agent: aio-monitor-agent/0.5.0' -H 'X-AIO-Batch-Id: 3f0c6d2e-7a51-4c1b-9f0a-0d2b8e6f1a77' \
-  --data-binary @batch.jsonl.gz https://aio-mothership.example.internal:8443/api/v1/ingest
+  --data-binary @batch.jsonl.gz https://<mothership-ip>:8443/api/v1/ingest
 ```
 
 ```json
@@ -430,7 +432,7 @@ Retry-After: 300
 
 ```http
 POST /api/v1/heartbeat HTTP/1.1
-Host: aio-mothership.example.internal:8443
+Host: <mothership-ip>:8443
 Content-Type: application/json
 User-Agent: aio-monitor-agent/0.5.0
 

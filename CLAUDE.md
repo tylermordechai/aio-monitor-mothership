@@ -59,9 +59,9 @@ You are a senior backend and security engineer building the "mothership" for the
 1. **Server and contract:** VM setup, Apache, PHP, MariaDB, TLS, firewall, agent CA, `docs/setup.md`. Write `docs/ingest-api.md` and the database schema; wait for my review. Gate: contract and schema approved.
 2. **Ingest:** endpoint with mTLS, validation, dedup, quarantine, acknowledgements; agent simulator. Gate: 500 simulated hosts, p95 under 500 ms, 0 lost; report MB per host per day (MS-DAT-06).
 3. **Enrolment:** one-time tokens, CSR signing, revocation, check-in tracking. Gate: revoked agent refused, silent agent flagged.
-4. **Retention and backups:** daily partitions, nightly summaries, mariabackup to the Unraid share, health checks. Gate: restore to a fresh VM tested and timed.
+4. **Retention:** daily partitions, retention, nightly summaries, health checks. Gate: proposed in MPD-30. Backups (mariabackup, restore test, MS-OPS-01..04) moved to a "before ready to ship" item (M-026).
 5. **Dashboard core:** sign-in, roles, audit log, fleet overview, host detail. Gate: every page under 5 s at 500 hosts, 7 days.
-6. **Dashboard full:** connections, change history, fleet search, export; enrichment (DNS, GeoLite2, threat lists). Gate: views match the simulator's data.
+6. **Dashboard full:** connections, change history, fleet search, export; enrichment (DNS, threat lists; no GeoLite2, M-027). Gate: views match the simulator's data.
 7. **Alerts and pilot:** alert rules and allow-lists; real agents connected once the agent's transport milestone is done. Gate: pilot go/no-go, privacy sign-off.
 
 ## How to work

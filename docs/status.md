@@ -2,14 +2,15 @@
 
 Last updated: 2026-11-13
 
-Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md); decisions are in [decisions.md](decisions.md) (M-001 to M-023); open items are in [pending-decisions.md](pending-decisions.md) (MPD-20, MPD-25 to MPD-29); working rules are in [../CLAUDE.md](../CLAUDE.md).
+Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md); decisions are in [decisions.md](decisions.md) (M-001 to M-028); open items are in [pending-decisions.md](pending-decisions.md) (MPD-29 to MPD-31); working rules are in [../CLAUDE.md](../CLAUDE.md).
 
 ## Pick up here
 
 - **Milestone 1 review done (2026-11-13):** the tech lead answered MPD-01 to MPD-19 and MPD-21 to MPD-24 (M-017 to M-023). **The ingest contract (v1) is approved**; agent 5c can build against it.
 - **The schema is approved once it applies cleanly on the milestone 1 VM.** It hasn't been applied anywhere yet (no MariaDB on the dev PC).
 - **Waiting:** the tech lead says when the VM is built. Don't start the server setup before that.
-- **Still open, not blocking:** MPD-20 (DNS name, dashboard CA) and MPD-25 (networks) are needed during the server setup; MPD-26 to MPD-29 later.
+- **Remaining answers recorded (2026-11-13), M-024 to M-028:** no DNS, the fixed IP in both server certificates and a second, name-constrained web CA for 443; ufw allows 8443, 443 and 22 from 192.168.0.0/24 only; backups moved to "before ready to ship"; three threat lists with their terms recorded, no GeoLite2; the owner is the only analyst and signs off privacy.
+- **Still open, not blocking:** MPD-29 (minor defaults), MPD-30 (milestone 4 gate; back up the CA keys before the pilot), MPD-31 (DShield terms). The IP is a placeholder (`<mothership-ip>`) until the VM is built.
 
 ## Summary
 
@@ -18,7 +19,7 @@ Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md
 | 1 | Server and contract | **Contract approved** (2026-11-13, M-017). Schema waits for its first clean apply on the VM. Server setup waits for the VM |
 | 2 | Ingest, simulator, load test | Not started |
 | 3 | Enrolment | Not started |
-| 4 | Retention, backups | Not started |
+| 4 | Retention (backups moved to "before ready to ship", M-026) | Not started |
 | 5 | Dashboard core | Not started |
 | 6 | Dashboard full, enrichment | Not started |
 | 7 | Alerts and pilot | Not started |
@@ -70,7 +71,11 @@ All of them: nothing is built yet. Milestone 1's contract and schema work covers
 
 ## Next steps
 
-1. **The tech lead builds the VM and says so.** Then the server part of milestone 1: Apache, PHP 8.3, MariaDB 11.8, TLS (1.3 only on 8443), ufw, agent CA, `docs/setup.md`. Answers to MPD-20 and MPD-25 are needed during it.
+1. **The tech lead builds the VM and says so,** with its fixed IP. Then the server part of milestone 1: Apache (one vhost per port), PHP 8.3, MariaDB 11.8, the agent CA and the web CA, both server certificates with the IP SAN, TLS 1.3 only on 8443, ufw (M-025), `docs/setup.md`.
 2. **Apply `0001_initial.sql`** on the VM's empty database and fix it until it applies cleanly; that approves the schema.
-3. **Agent 5c can start now** from the approved contract (ingest-api.md §10).
-4. **For the tech lead, not done here:** add MS-ING-11 and the new MS-ING-01 wording to `mothership-plan.md`, and `inventory_link_index` to CLAUDE.md's list of record types (M-016, M-018). These files are the spec and working rules, so they were left as they are.
+3. **Agent 5c can start now** from the approved contract (ingest-api.md §10). Its collector address is the mothership's IP.
+4. **For the tech lead:** add MS-ING-11 and the new MS-ING-01 wording to `mothership-plan.md`, and `inventory_link_index` to CLAUDE.md's list of record types (M-016, M-018). Not done here.
+
+## Before ready to ship (M-026)
+
+- Backups and a timed restore to a fresh VM: MS-OPS-01 to MS-OPS-04, plus the Unraid disk and off-box copy questions.

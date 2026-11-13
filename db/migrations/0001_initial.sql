@@ -1173,6 +1173,8 @@ CREATE TABLE ip_enrichment (
     rdns_name        VARCHAR(255)   NULL,
     rdns_status      VARCHAR(16)    NULL COMMENT 'ok, nxdomain, timeout, error',
     rdns_checked_at  DATETIME(6)    NULL,
+    -- Country and ASN stay NULL: no MaxMind account, MS-ENR-02 not built (M-027).
+    -- The columns are kept so it can be added later without a migration.
     country          CHAR(2)        NULL,
     asn              INT UNSIGNED   NULL,
     as_org           VARCHAR(255)   NULL,
@@ -1192,11 +1194,42 @@ CREATE TABLE threat_lists (
     url              VARCHAR(500)   NOT NULL,
     enabled          BOOLEAN        NOT NULL DEFAULT TRUE,
     refresh_minutes  INT UNSIGNED   NOT NULL DEFAULT 240,
+    min_refresh_minutes INT UNSIGNED NOT NULL DEFAULT 60 COMMENT 'the provider''s floor; the job never fetches more often',
+    terms_url        VARCHAR(500)   NULL,
+    terms_summary    VARCHAR(1000)  NULL COMMENT 'M-027: the list''s terms as checked, with the date',
+    attribution      VARCHAR(255)   NULL COMMENT 'credit to show where the list is used, if required',
     last_fetch_at    DATETIME(6)    NULL,
     last_fetch_status VARCHAR(64)   NULL,
     entries          INT UNSIGNED   NULL,
+    dropped_internal INT UNSIGNED   NULL COMMENT 'entries skipped at import because they overlap internal or reserved ranges (MS-ENR-04, M-027)',
     UNIQUE KEY uq_threat_lists_name (name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- MS-ENR-03, M-027: the three agreed lists, terms checked 2026-11-13.
+-- Every entry overlapping a private, loopback, link-local, CGNAT, multicast or
+-- other reserved range is skipped at import (firehol_level1 includes
+-- fullbogons, so it lists 10/8, 172.16/12 and 192.168/16).
+INSERT INTO threat_lists (name, url, enabled, refresh_minutes, min_refresh_minutes, terms_url, terms_summary, attribution) VALUES
+ ('abuse.ch Feodo Tracker',
+  'https://feodotracker.abuse.ch/downloads/ipblocklist_recommended.txt', TRUE, 15, 5,
+  'https://abuse.ch/terms-of-use/',
+  'CC0, commercial and non-commercial use, no attribution required, no export limits for Feodo Tracker (terms s. 3.4); data as is, no liability; no AI training without consent (s. 7.3). Checked 2026-11-13.',
+  NULL),
+ ('Spamhaus DROP v4',
+  'https://www.spamhaus.org/drop/drop_v4.json', TRUE, 1440, 60,
+  'https://www.spamhaus.org/blocklists/do-not-route-or-peer/',
+  'Free for any use. Credit Spamhaus Project and keep the date and copyright with the data. Never fetch more than once an hour (else the IP may be firewalled); daily is enough. EDROP merged into DROP on 2024-04-10. Checked 2026-11-13.',
+  'Spamhaus DROP list, (c) The Spamhaus Project'),
+ ('Spamhaus DROP v6',
+  'https://www.spamhaus.org/drop/drop_v6.json', TRUE, 1440, 60,
+  'https://www.spamhaus.org/blocklists/do-not-route-or-peer/',
+  'As Spamhaus DROP v4. Checked 2026-11-13.',
+  'Spamhaus DROP list, (c) The Spamhaus Project'),
+ ('FireHOL Level 1',
+  'https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/firehol_level1.netset', TRUE, 240, 60,
+  'https://iplists.firehol.org/',
+  'FireHOL tooling is GPL v2; "IP lists are a property of their maintainers". Aggregates dshield, feodo, fullbogons and spamhaus_drop; each source''s own terms apply (DShield''s terms not yet checked, MPD-31). Contains private ranges: filtered at import. Checked 2026-11-13.',
+  NULL);
 
 -- Entries are CIDR ranges, stored as start and end addresses of one length.
 CREATE TABLE threat_list_entries (

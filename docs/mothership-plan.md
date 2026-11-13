@@ -40,9 +40,9 @@ Windows servers (50-500)          Unraid VM: Ubuntu, Apache, PHP, MariaDB       
                                         | reads and writes
                             +-----------v-------------------------------------+
                             | Background jobs                                 |<------- Outside feeds
-                            | enrichment: DNS, country, reputation            |         (GeoLite2,
-                            | alert rules every minute                        |          threat IP lists)
-                            | nightly retention, summaries, backups           |
+                            | enrichment: DNS, reputation                     |         (threat IP
+                            | alert rules every minute                        |          lists)
+                            | nightly retention, summaries                    |
                             +-------------------------------------------------+
 ```
 
@@ -70,16 +70,16 @@ Start the pilot VM at 4 vCPU, 16 GB RAM and a 250 GB disk on Unraid's SSD cache 
 
 **Names and certificates**
 
-- One internal DNS name, e.g. `aio-mothership.<your-domain>` *(confirm)*, used by agents and the dashboard.
-- Two certificate authorities: a **private agent CA** on the mothership for agent client certificates, and a normal server certificate for HTTPS (internal CA or Let's Encrypt via DNS challenge).
+- No DNS name: agents and the dashboard use the VM's fixed IP on 192.168.0.0/24, which goes into both server certificates as an IP SAN (decision M-024).
+- Two private CAs on the mothership: a **private agent CA** for agent client certificates and the 8443 server certificate, and a separate **web CA**, name-constrained to 192.168.0.0/24, for the 443 dashboard certificate; its CA certificate is imported on the admin PC (M-024).
 
 **Network and firewall** (ufw on the VM, plus your router or switch rules)
 
 | Port | Purpose | Allowed from |
 | --- | --- | --- |
-| 8443 | Agent ingest, mutual TLS required | Server networks only |
-| 443 | Dashboard and admin | Admin and analyst workstations only |
-| 22 | SSH, keys only, no passwords | Admin workstations only |
+| 8443 | Agent ingest, mutual TLS required | 192.168.0.0/24 only (M-025) |
+| 443 | Dashboard and admin | 192.168.0.0/24 only (M-025) |
+| 22 | SSH, keys only, no passwords | 192.168.0.0/24 only (M-025) |
 | everything else | blocked | — |
 
 Outbound from the VM: OS updates, and the enrichment feed downloads (MS-ENR). No internet-facing ports during development or the pilot.
@@ -131,13 +131,13 @@ Each agent record type gets its own MariaDB table, big tables are split into one
 
 ## Enrichment
 
-A background job adds a hostname, country and reputation to each new remote IP after it is stored, so ingest never waits on a lookup. Results are cached in `ip_enrichment` and shown beside every connection.
+A background job adds a hostname and reputation (country not for now, M-027) to each new remote IP after it is stored, so ingest never waits on a lookup. Results are cached in `ip_enrichment` and shown beside every connection.
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
 | MS-ENR-01 | Reverse DNS for each new public and internal remote IP, cached 24 hours; failures cached too, so a dead DNS server can't slow the job. | Must |
-| MS-ENR-02 | Country and network owner (ASN) from MaxMind GeoLite2 (free account and licence key needed), updated weekly. | Should |
-| MS-ENR-03 | Reputation from free threat-intel IP lists, refreshed every few hours; matches stored with the list name and the date they were listed. Proposed lists: abuse.ch Feodo Tracker, Spamhaus DROP, FireHOL Level 1 *(confirm; check each list's terms)*. | Should |
+| MS-ENR-02 | Country and network owner (ASN) from MaxMind GeoLite2 (free account and licence key needed), updated weekly. **Not built for now: no MaxMind account (M-027).** | Should |
+| MS-ENR-03 | Reputation from free threat-intel IP lists, refreshed every few hours; matches stored with the list name and the date they were listed. Lists: abuse.ch Feodo Tracker, Spamhaus DROP, FireHOL Level 1, with each list's terms recorded; private and reserved ranges are removed at import (M-027). | Should |
 | MS-ENR-04 | Private, loopback and link-local addresses are labelled "internal" and never sent to outside lookups. | Must |
 | MS-ENR-05 | When a list update flags an IP, connections from the last 30 days to it are re-checked and alerted on (MS-ALR-03). | Should |
 | MS-ENR-06 | Certificate revocation for executables: the agent sends each signing certificate's thumbprint and serial number (agent decision PD-5); the mothership checks them against the issuers' revocation lists daily, marks revoked signers, and raises MS-ALR-02 for processes using them. The agent itself never checks revocation over the network. | Should |
@@ -242,20 +242,22 @@ Seven milestones, one at a time, each ending in a test you can check; milestone 
 | 1 | Server and contract | VM, Apache, PHP, MariaDB, TLS, firewall; agent CA; `docs/ingest-api.md` and schema | API contract and schema approved by the user |
 | 2 | Ingest | Ingest endpoint, dedup, quarantine; agent simulator; size per host per day | 500 simulated hosts: p95 under 500 ms, 0 lost |
 | 3 | Enrolment | One-time tokens, certificate signing, revocation, agent check-ins | Revoked agent refused, silent agent flagged |
-| 4 | Retention, backups | Daily partitions, nightly summaries, mariabackup, health checks | Restore to a fresh VM tested and timed |
+| 4 | Retention | Daily partitions, retention, nightly summaries, health checks (backups moved to "before ready to ship", M-026) | Proposed in MPD-30 |
 | 5 | Dashboard core | Sign-in, roles, audit log, fleet overview, host detail | Every page under 5 s at 500 hosts, 7 days |
-| 6 | Dashboard full | Connections, history, search, export; enrichment: DNS, country, reputation | Views match agent data on simulator output |
+| 6 | Dashboard full | Connections, history, search, export; enrichment: DNS, reputation | Views match agent data on simulator output |
 | 7 | Alerts and pilot | Alert rules, allow-lists; agent transport live on pilot hosts | Pilot go/no-go; privacy sign-off done |
+
+**Before ready to ship** (not a milestone gate): backups and a timed restore test, MS-OPS-01 to MS-OPS-04 (M-026).
 
 Milestones 1 to 6 are tested with an agent simulator, so they don't wait for the agent's transport milestone; real agents connect in milestone 7.
 
 ## Open questions
 
-- [ ] Fleet size for the pilot and for production (default: 50, designed for 500).
-- [ ] Retention: detail 90 days, summaries 2 years, command lines 30 days?
-- [ ] Internal DNS name and which CA issues the dashboard's HTTPS certificate.
-- [ ] Which networks the servers and the admin workstations sit on, for the firewall rules.
-- [ ] Free disk on Unraid's cache pool for the VM, and where the off-box backup copy goes.
-- [ ] Threat-intel lists to use, and whether to create a MaxMind account for GeoLite2.
-- [ ] Who gets analyst access (command lines) and who signs off privacy.
+- [x] Fleet size for the pilot and for production (default: 50, designed for 500): kept (M-017).
+- [x] Retention: detail 90 days, summaries 2 years, command lines 30 days: accepted as defaults (M-017).
+- [x] Internal DNS name and which CA issues the dashboard's HTTPS certificate: none; fixed IP, web CA on the mothership (M-024).
+- [x] Which networks the servers and the admin workstations sit on: 192.168.0.0/24 (M-025).
+- [ ] Free disk on Unraid's cache pool for the VM, and where the off-box backup copy goes: deferred with the backups (M-026).
+- [x] Threat-intel lists to use, and whether to create a MaxMind account for GeoLite2: the three lists, no MaxMind (M-027).
+- [x] Who gets analyst access (command lines) and who signs off privacy: the owner (M-028).
 - [x] Order: settled. The mothership starts now, in parallel with the agent.

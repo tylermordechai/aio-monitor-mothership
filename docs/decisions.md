@@ -185,3 +185,52 @@ Proposed in [ingest-api.md](ingest-api.md) and `db/migrations/0001_initial.sql`,
 **Requirements:** MS-OPS-07 · **Status:** Accepted 2026-11-13 (MPD-19)
 - **Ubuntu Server 24.04 LTS**, **MariaDB 11.8 LTS** from the MariaDB repository (Ubuntu 24.04's own package is 10.11), PHP 8.3, Apache 2.4.
 - 11.8 is supported to 2028 and has everything the schema uses (JSON_VALUE, RANGE COLUMNS partitions, virtual columns).
+
+## Remaining review answers (2026-11-13)
+
+### M-024 No DNS name: the mothership is reached by its fixed IP; a second private CA for 443
+**Requirements:** MS-SEC-01, AG-SEC-04, MS-ING-06 · **Status:** Accepted 2026-11-13 (MPD-20)
+- **There is no local domain or DNS server.** Agents and browsers use the mothership's fixed IP on 192.168.0.0/24, set when the VM is built. Docs and config use the placeholder `<mothership-ip>` until then.
+- **Both server certificates** (8443 and 443) carry the IP as an `iPAddress` SAN and no DNS name.
+- **Two private CAs on the mothership:**
+  - the **agent CA** (M-002): agent client certificates and the 8443 server certificate; agents pin it;
+  - a separate **web CA**: only the 443 dashboard certificate. The tech lead imports its CA certificate on the admin PC.
+- **The web CA is limited by name constraints** to `iPAddress` 192.168.0.0/24 (critical extension), so if its key ever leaked it couldn't sign a certificate the admin PC would trust for any other site. Its key is used about once a year, readable by root only, and never by PHP or the signing service.
+- **No SNI** is sent for an IP, so Apache selects the vhost by port: one per port.
+- **Changing the IP later** means reissuing both server certificates and changing the collector address on every agent. The IP is treated as permanent once agents are enrolled.
+
+### M-025 Firewall: 8443, 443 and 22 from 192.168.0.0/24 only
+**Requirements:** MS-SEC-01, CLAUDE.md "no internet-facing ports" · **Status:** Accepted 2026-11-13 (MPD-25)
+- Servers and the admin PC share 192.168.0.0/24. ufw allows **8443, 443 and 22 from 192.168.0.0/24 only**, and denies all other inbound traffic.
+- SSH stays keys only, no passwords.
+- Outbound: OS and MariaDB repository updates, and the threat-list downloads (M-027).
+- Because servers and the admin PC share one range, the port rules can't separate them; mTLS on 8443 and sign-in on 443 do that.
+
+### M-026 Backups deferred to a "before ready to ship" item; milestone 4 without backups
+**Requirements:** MS-OPS-01..04, MS-OPS-07 · **Status:** Accepted 2026-11-13 (MPD-26)
+- **MS-OPS-01 to 04 stay in the plan** unchanged, but the backup and restore-test work moves out of milestone 4 to a **"before ready to ship"** item.
+- **Milestone 4 keeps:** daily partitions, retention, nightly summaries and health checks (MS-DAT-02, 03, MS-OPS-05, 06, 08).
+- **Milestone 4's gate** was "restore to a fresh VM tested and timed". A replacement is proposed in MPD-30.
+- **Until backups exist:** MS-OPS-07 covers rebuilding the server from the repo, but not restoring data; the recovery targets agreed in M-017 (4 h, 24 h) can't be met; and losing the VM loses all stored data and both CA keys. Losing the agent CA key means re-enrolling every agent (MPD-30).
+- The Unraid cache-pool size and the off-box copy (the rest of MPD-26) are settled with the backup work.
+
+### M-027 Enrichment: three threat lists, terms recorded; no GeoLite2
+**Requirements:** MS-ENR-02, 03, 04, MS-ALR-07, MS-UI-03 · **Status:** Accepted 2026-11-13 (MPD-27)
+- **Threat lists:** abuse.ch Feodo Tracker, Spamhaus DROP (v4 and v6), FireHOL Level 1. Each list's terms are stored in `threat_lists` (checked 2026-11-13):
+
+| List | Terms | Fetch |
+| --- | --- | --- |
+| Feodo Tracker (`ipblocklist_recommended.txt`) | CC0, commercial or not, no attribution, no export limits (abuse.ch terms s. 3.4); as is, no liability; no AI training without consent | every 15 min (it is rebuilt every 5) |
+| Spamhaus DROP (`drop_v4.json`, `drop_v6.json`) | Free for any use; credit Spamhaus and keep the date and copyright with the data | daily; **never more than once an hour**, or the IP may be blocked |
+| FireHOL Level 1 (`firehol_level1.netset`) | FireHOL tooling GPL v2; "IP lists are a property of their maintainers". It aggregates dshield, feodo, fullbogons and spamhaus_drop, whose own terms apply | every 4 h |
+
+- **FireHOL Level 1 contains private ranges** (it includes fullbogons, so 10/8, 172.16/12 and 192.168/16 are listed). Matched as is, every internal connection would be "flagged". So **every entry overlapping a private, loopback, link-local, CGNAT, multicast or other reserved range is skipped at import** and counted (`dropped_internal`), and internal addresses are never matched against any list (MS-ENR-04).
+- **DShield's terms** (a FireHOL source) are not checked yet (MPD-31).
+- **No MaxMind account:** `country`, `asn` and `as_org` stay NULL, and **MS-ENR-02 is not built for now**. The columns stay, so it can be added without a migration.
+- **What that switches off:** MS-ALR-07 (new country or network owner, Could) can't work and isn't built; the connections view (MS-UI-03) shows no country column.
+- No outbound lookups to other services (no WHOIS, no online GeoIP).
+
+### M-028 Analyst access and privacy sign-off
+**Requirements:** MS-SEC-07..09, milestone 7 gate · **Status:** Accepted 2026-11-13 (MPD-28)
+- **The owner is the only analyst** (the only role that can see command lines), and signs off on privacy before the pilot.
+- Command-line views are still audited (MS-SEC-08), even with one analyst.
