@@ -125,7 +125,7 @@ Proposed in [ingest-api.md](ingest-api.md) and `db/migrations/0001_initial.sql`,
 
 ### M-017 Review of the milestone 1 contract and schema
 **Requirements:** MS-ING-01..11, MS-DAT-01, 02, 04, 05, MS-SEC-01..04, 07..09 · **Status:** Accepted 2026-11-13
-- **The tech lead's answers:** MPD-01, 02, 04, 10, 14 to 18, 21 to 24 accepted as recommended; MPD-03 (a), 05 (a), 06 (a, with the `seq_epoch` correction in M-020), 07 (a), 08 (a), 09 (a, TLS 1.3 on 8443), 11 (a), 12 (a), 13 (a); MPD-19 Ubuntu 24.04 LTS and MariaDB 11.8 LTS.
+- **The tech lead's answers:** MPD-01, 02, 04, 10, 14 to 18, 21 to 24 accepted as recommended; MPD-03 (a), 05 (a), 06 (a, with the `seq_epoch` correction in M-020), 07 (a), 08 (a), 09 (a, TLS 1.3 on 8443), 11 (a), 12 (a), 13 (a); MPD-19 Ubuntu 24.04 LTS and MariaDB 11.8 LTS (later changed to Ubuntu 26.04.1 LTS, M-029).
 - **The contract** ([ingest-api.md](ingest-api.md) v1) is **approved**. Agent 5c builds against it.
 - **The schema** (`0001_initial.sql`) is approved once it applies cleanly on the milestone 1 VM.
 - **M-001 to M-016** are accepted as written, with the changes in M-018 to M-023.
@@ -182,7 +182,7 @@ Proposed in [ingest-api.md](ingest-api.md) and `db/migrations/0001_initial.sql`,
 - `retention_policies` row for `quarantine` set to 90.
 
 ### M-023 Platform versions
-**Requirements:** MS-OPS-07 · **Status:** Accepted 2026-11-13 (MPD-19)
+**Requirements:** MS-OPS-07 · **Status:** Superseded by M-029 (2026-11-13)
 - **Ubuntu Server 24.04 LTS**, **MariaDB 11.8 LTS** from the MariaDB repository (Ubuntu 24.04's own package is 10.11), PHP 8.3, Apache 2.4.
 - 11.8 is supported to 2028 and has everything the schema uses (JSON_VALUE, RANGE COLUMNS partitions, virtual columns).
 
@@ -203,7 +203,7 @@ Proposed in [ingest-api.md](ingest-api.md) and `db/migrations/0001_initial.sql`,
 **Requirements:** MS-SEC-01, CLAUDE.md "no internet-facing ports" · **Status:** Accepted 2026-11-13 (MPD-25)
 - Servers and the admin PC share 192.168.0.0/24. ufw allows **8443, 443 and 22 from 192.168.0.0/24 only**, and denies all other inbound traffic.
 - SSH stays keys only, no passwords.
-- Outbound: OS and MariaDB repository updates, and the threat-list downloads (M-027).
+- Outbound: Ubuntu package updates (no third-party repositories, M-029), and the threat-list downloads (M-027).
 - Because servers and the admin PC share one range, the port rules can't separate them; mTLS on 8443 and sign-in on 443 do that.
 
 ### M-026 Backups deferred to a "before ready to ship" item; milestone 4 without backups
@@ -234,3 +234,11 @@ Proposed in [ingest-api.md](ingest-api.md) and `db/migrations/0001_initial.sql`,
 **Requirements:** MS-SEC-07..09, milestone 7 gate · **Status:** Accepted 2026-11-13 (MPD-28)
 - **The owner is the only analyst** (the only role that can see command lines), and signs off on privacy before the pilot.
 - Command-line views are still audited (MS-SEC-08), even with one analyst.
+
+### M-029 Platform: Ubuntu 26.04.1 LTS with Ubuntu's own packages (supersedes M-023)
+**Requirements:** MS-OPS-07 · **Status:** Accepted 2026-11-13 (MPD-19 changed by the tech lead)
+- **The VM runs Ubuntu Server 26.04.1 LTS.**
+- **Everything comes from Ubuntu's own archive:** MariaDB 11.8 LTS from `main`, PHP 8.5, Apache 2.4. There is no MariaDB.org or other third-party repository, so updates come only through Ubuntu's normal security updates.
+- **MariaDB's data directory on 26.04 is `/var/lib/mariadb`**, not `/var/lib/mysql`. Setup notes, AppArmor expectations, disk checks (MS-OPS-05, 08) and later backup paths (MS-OPS-01) use `/var/lib/mariadb`.
+- **The schema is unchanged:** it targets MariaDB 11.8 either way.
+- **PHP 8.5:** the code targets 8.5, and any library proposed later must support it.

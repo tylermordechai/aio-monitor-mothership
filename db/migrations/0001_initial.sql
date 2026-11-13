@@ -2,7 +2,7 @@
 --
 -- Status: contract approved 2026-11-13 (M-017). The schema is approved once it
 -- applies cleanly on the milestone 1 VM; until then it may still be edited in place.
--- Target: MariaDB 11.8 LTS on Ubuntu 24.04 LTS (M-023), InnoDB, utf8mb4.
+-- Target: MariaDB 11.8 LTS from Ubuntu 26.04.1 LTS main (M-029), InnoDB, utf8mb4.
 --
 -- Conventions (M-010; see docs/decisions.md):
 --   * All times are UTC, DATETIME(6). The agent sends 7 fractional digits; the

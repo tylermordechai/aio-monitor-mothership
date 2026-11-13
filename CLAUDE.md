@@ -30,8 +30,8 @@ You are a senior backend and security engineer building the "mothership" for the
 
 ## Platform
 
-- Ubuntu Server 24.04 LTS *(confirm)* in a VM on Unraid, disk on the SSD cache pool, bridged network with a fixed IP, internal network only.
-- Apache 2.4, MariaDB (latest LTS), PHP 8.3+. Composer for dependencies; ask before adding any library and say why, with its licence and maintenance status.
+- Ubuntu Server 26.04.1 LTS (M-029) in a VM on Unraid, disk on the SSD cache pool, bridged network with a fixed IP, internal network only.
+- Apache 2.4, MariaDB 11.8 LTS, PHP 8.5, all from Ubuntu's own packages (no third-party repositories; M-029). MariaDB's data directory is `/var/lib/mariadb`, not `/var/lib/mysql`. Composer for dependencies; ask before adding any library and say why, with its licence and maintenance status.
 - Background jobs (enrichment, alert rules, retention, summaries, backups) run as PHP CLI scripts from systemd timers, never from web requests.
 - Everything needed to rebuild the server lives in this repo: app code, Apache vhosts, SQL migrations (`db/migrations/`), systemd units, and `docs/setup.md` (MS-OPS-07).
 

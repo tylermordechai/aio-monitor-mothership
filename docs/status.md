@@ -2,7 +2,7 @@
 
 Last updated: 2026-11-13
 
-Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md); decisions are in [decisions.md](decisions.md) (M-001 to M-028); open items are in [pending-decisions.md](pending-decisions.md) (MPD-29 to MPD-31); working rules are in [../CLAUDE.md](../CLAUDE.md).
+Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md); decisions are in [decisions.md](decisions.md) (M-001 to M-029); open items are in [pending-decisions.md](pending-decisions.md) (MPD-29 to MPD-31); working rules are in [../CLAUDE.md](../CLAUDE.md).
 
 ## Pick up here
 
@@ -35,7 +35,7 @@ Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md
 - Wrote `db/migrations/0001_initial.sql`: one table per agent record type, the mothership's own tables, and daily partitions where the plan asks for them.
 - Recorded M-001 to M-016, and MPD-01 to MPD-28 with recommendations.
 
-**Review (2026-11-13):** answers recorded as M-017 to M-023: renewal endpoint and new requirement MS-ING-11 (Should), TLS 1.3 only on 8443, the `seq_epoch` correction (it detects a recreated state file, not a snapshot revert), manual and deployment tokens (`enrollment_tokens.token_kind`), quarantine kept 90 days, Ubuntu 24.04 LTS with MariaDB 11.8 LTS. ingest-api.md, the schema and pending-decisions.md updated to match.
+**Review (2026-11-13):** answers recorded as M-017 to M-023: renewal endpoint and new requirement MS-ING-11 (Should), TLS 1.3 only on 8443, the `seq_epoch` correction (it detects a recreated state file, not a snapshot revert), manual and deployment tokens (`enrollment_tokens.token_kind`), quarantine kept 90 days, Ubuntu 24.04 LTS with MariaDB 11.8 LTS (since changed to Ubuntu 26.04.1 LTS with Ubuntu's MariaDB 11.8 and PHP 8.5, M-029). ingest-api.md, the schema and pending-decisions.md updated to match.
 
 **Findings from the agent source that shape the contract:**
 - **`seq` is one counter per `agent_id`**, shared by every record type and output file, reserved in ranges before use.
@@ -71,7 +71,7 @@ All of them: nothing is built yet. Milestone 1's contract and schema work covers
 
 ## Next steps
 
-1. **The tech lead builds the VM and says so,** with its fixed IP. Then the server part of milestone 1: Apache (one vhost per port), PHP 8.3, MariaDB 11.8, the agent CA and the web CA, both server certificates with the IP SAN, TLS 1.3 only on 8443, ufw (M-025), `docs/setup.md`.
+1. **The tech lead builds the VM and says so,** with its fixed IP. Then the server part of milestone 1: Apache (one vhost per port), Ubuntu 26.04.1 LTS with its own packages (PHP 8.5, MariaDB 11.8 from main, data in `/var/lib/mariadb`; M-029), the agent CA and the web CA, both server certificates with the IP SAN, TLS 1.3 only on 8443, ufw (M-025), `docs/setup.md`.
 2. **Apply `0001_initial.sql`** on the VM's empty database and fix it until it applies cleanly; that approves the schema.
 3. **Agent 5c can start now** from the approved contract (ingest-api.md §10). Its collector address is the mothership's IP.
 4. **For the tech lead:** add MS-ING-11 and the new MS-ING-01 wording to `mothership-plan.md`, and `inventory_link_index` to CLAUDE.md's list of record types (M-016, M-018). Not done here.

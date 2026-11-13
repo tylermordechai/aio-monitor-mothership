@@ -3,7 +3,7 @@
 **Status: approved (v1), 2026-11-13, at the milestone 1 review.** Nothing here is built yet. Agent milestone 5c (collector transport) is built against this document. Changes from here on are recorded as decisions (M-xxx) and keep `/api/v1`; a breaking change needs `/api/v2`.
 
 - Requirements: MS-ING-01 to MS-ING-11 (MS-ING-11 added at the review, M-018), plus MS-SEC-01..03, MS-SEC-10, MS-OPS-08. Agent side: AG-SEC-03/04/07, AG-DAT-01..04, AG-PRF-04/06, AG-CFG-01..03, AG-INV-16.
-- Decisions: M-001 to M-028 in [decisions.md](decisions.md); the review answers are M-017 and M-024 to M-028. Values still open (MPD-29 to MPD-31) are in [pending-decisions.md](pending-decisions.md), each with a recommendation.
+- Decisions: M-001 to M-029 in [decisions.md](decisions.md); the review answers are M-017 and M-024 to M-028. Values still open (MPD-29 to MPD-31) are in [pending-decisions.md](pending-decisions.md), each with a recommendation.
 - Agent sources read for this contract (agent repo, `master`, 2026-11-13): `docs/status.md`, `docs/decisions.md` (D-004, D-008, D-016, D-039, D-060, D-071, D-073), `docs/agent-requirements.md`, `internal/config/identity.go`, `internal/output/jsonfile.go`, the record structs in `internal/netcollect`, `internal/proc` and `internal/inventory`.
 
 ## 1. Overview

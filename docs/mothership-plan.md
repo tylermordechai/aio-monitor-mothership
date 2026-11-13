@@ -16,9 +16,9 @@ The mothership is a single Ubuntu VM on Unraid running Apache, PHP and MariaDB. 
 | Detailed data kept (flows, connections, process events) | 90 days | *(confirm)* |
 | Daily summaries kept | 2 years | *(confirm)* |
 | Command lines kept | 30 days, then removed from records | *(confirm)* |
-| Host OS for the VM | Ubuntu Server 24.04 LTS | *(confirm)* |
+| Host OS for the VM | Ubuntu Server 26.04.1 LTS | Decided (M-029) |
 | Where it runs | VM on Unraid, on the internal network only | Decided |
-| Stack | Apache 2.4, PHP 8.3+, MariaDB (LTS) | Decided |
+| Stack | Apache 2.4, PHP 8.5, MariaDB 11.8 LTS, all from Ubuntu's own packages | Decided (M-029) |
 
 ## Architecture
 
