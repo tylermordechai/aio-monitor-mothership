@@ -1,7 +1,8 @@
 -- 0001_initial.sql: the initial mothership schema (MS-DAT-01).
 --
--- Status: DRAFT for the milestone 1 review. Not applied anywhere yet.
--- Target: MariaDB LTS (11.8 proposed, MPD-19), InnoDB, utf8mb4.
+-- Status: contract approved 2026-11-13 (M-017). The schema is approved once it
+-- applies cleanly on the milestone 1 VM; until then it may still be edited in place.
+-- Target: MariaDB 11.8 LTS on Ubuntu 24.04 LTS (M-023), InnoDB, utf8mb4.
 --
 -- Conventions (M-010; see docs/decisions.md):
 --   * All times are UTC, DATETIME(6). The agent sends 7 fractional digits; the
@@ -139,6 +140,7 @@ CREATE TABLE enrollment_tokens (
     group_id            INT UNSIGNED  NOT NULL,
     expected_hostname   VARCHAR(255)  NULL COMMENT 'optional: only this hostname may use it',
     reenroll_agent_id   CHAR(36)      NULL COMMENT 'set: a re-enrolment token for this agent (§2.5)',
+    token_kind          ENUM('manual','deployment') NOT NULL DEFAULT 'manual' COMMENT 'M-021: manual at most 24 h, deployment at most 7 days',
     note                VARCHAR(500)  NULL,
     created_by          INT UNSIGNED  NULL COMMENT 'users.id; NULL when made by the CLI',
     created_at          DATETIME(6)   NOT NULL,
@@ -564,7 +566,7 @@ PARTITION BY RANGE COLUMNS (ts) (
 );
 
 -- MS-SEC-07..09: command lines apart, so they are cleared after 30 days
--- (confirm) by dropping whole partitions, and only analyst queries touch them.
+-- (M-017) by dropping whole partitions, and only analyst queries touch them.
 CREATE TABLE process_command_lines (
     agent_pk      INT UNSIGNED   NOT NULL,
     host_pk       INT UNSIGNED   NOT NULL,
@@ -662,7 +664,7 @@ CREATE TABLE agent_lifecycle (
 --
 -- Each inv_* table keeps every item record received (history, partitioned,
 -- 90 days). `item_key` is the agent's change-detection key: from the record
--- once the agent sends it (MPD-12), otherwise derived by the mothership with
+-- once the agent sends it (M-012), otherwise derived by the mothership with
 -- the agent's rules (key_source = 'derived', M-012). `snapshot_id` is the
 -- inventory_snapshot the record belongs to, when known.
 -- inventory_current holds the latest state per host and item (kept by a
@@ -691,7 +693,7 @@ PARTITION BY RANGE COLUMNS (ts) (
     PARTITION p_future VALUES LESS THAN (MAXVALUE)
 );
 
--- inventory_change: 2 years (confirm). `key` and `change` are reserved words.
+-- inventory_change: 2 years (M-017). `key` and `change` are reserved words.
 CREATE TABLE inventory_changes (
     agent_pk       INT UNSIGNED   NOT NULL,
     host_pk        INT UNSIGNED   NOT NULL,
@@ -720,7 +722,7 @@ PARTITION BY RANGE COLUMNS (ts) (
     PARTITION p_future VALUES LESS THAN (MAXVALUE)
 );
 
--- inventory_link_index (5b): one row per link-index build. Small; MPD-13.
+-- inventory_link_index (5b): one row per link-index build. Small; M-016.
 CREATE TABLE inventory_link_index (
     agent_pk          INT UNSIGNED   NOT NULL,
     host_pk           INT UNSIGNED   NOT NULL,
@@ -1367,7 +1369,7 @@ CREATE TABLE alerts (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------------------------
--- Daily summaries (MS-DAT-03), 2 years (confirm). Built nightly before the
+-- Daily summaries (MS-DAT-03), 2 years (M-017). Built nightly before the
 -- detail expires. Monthly partitions on `day`.
 -- ---------------------------------------------------------------------------
 
@@ -1476,8 +1478,8 @@ PARTITION BY RANGE COLUMNS (day) (
 -- Operations (MS-DAT-02, MS-OPS-05)
 -- ---------------------------------------------------------------------------
 
--- MS-DAT-02: retention per table, as data. Values marked (confirm) in the
--- plan are defaults to confirm (docs/pending-decisions.md, MPD-18).
+-- MS-DAT-02: retention per table, as data. The plan's values were accepted as
+-- defaults at the milestone 1 review (M-017); changing one is a row update.
 CREATE TABLE retention_policies (
     table_name      VARCHAR(64)   NOT NULL PRIMARY KEY,
     keep_days       INT UNSIGNED  NOT NULL,
@@ -1487,42 +1489,42 @@ CREATE TABLE retention_policies (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO retention_policies (table_name, keep_days, method, partition_unit, note) VALUES
- ('net_flows',                     90, 'drop_partition', 'day',   'detail 90 days (confirm)'),
- ('snapshots',                     90, 'drop_partition', 'day',   'detail 90 days (confirm)'),
- ('snap_tcp_conns',                90, 'drop_partition', 'day',   'detail 90 days (confirm)'),
- ('snap_listeners',                90, 'drop_partition', 'day',   'detail 90 days (confirm)'),
- ('snap_udp_endpoints',            90, 'drop_partition', 'day',   'detail 90 days (confirm)'),
- ('process_events',                90, 'drop_partition', 'day',   'detail 90 days (confirm)'),
- ('process_command_lines',         30, 'drop_partition', 'day',   'command lines 30 days (confirm), MS-SEC-09'),
- ('agent_status',                  90, 'drop_partition', 'day',   'detail 90 days (confirm)'),
- ('inventory_snapshots',           90, 'drop_partition', 'day',   'full snapshots 90 days (confirm)'),
- ('inv_apps',                      90, 'drop_partition', 'day',   'full snapshots 90 days (confirm)'),
- ('inv_services',                  90, 'drop_partition', 'day',   'full snapshots 90 days (confirm)'),
- ('inv_tasks',                     90, 'drop_partition', 'day',   'full snapshots 90 days (confirm)'),
- ('inv_startup',                   90, 'drop_partition', 'day',   'full snapshots 90 days (confirm)'),
- ('inv_drivers',                   90, 'drop_partition', 'day',   'full snapshots 90 days (confirm)'),
- ('inv_roles',                     90, 'drop_partition', 'day',   'full snapshots 90 days (confirm)'),
- ('host_facts',                    90, 'drop_partition', 'day',   'full snapshots 90 days (confirm)'),
- ('inv_iis',                       90, 'drop_partition', 'day',   'full snapshots 90 days (confirm)'),
- ('inv_iis_sites',                 90, 'drop_partition', 'day',   'full snapshots 90 days (confirm)'),
- ('inv_iis_app_pools',             90, 'drop_partition', 'day',   'full snapshots 90 days (confirm)'),
- ('inv_sql_instances',             90, 'drop_partition', 'day',   'full snapshots 90 days (confirm)'),
- ('inv_server_apps',               90, 'drop_partition', 'day',   'full snapshots 90 days (confirm)'),
- ('inventory_changes',            730, 'drop_partition', 'day',   'changes 2 years (confirm)'),
+ ('net_flows',                     90, 'drop_partition', 'day',   'detail 90 days'),
+ ('snapshots',                     90, 'drop_partition', 'day',   'detail 90 days'),
+ ('snap_tcp_conns',                90, 'drop_partition', 'day',   'detail 90 days'),
+ ('snap_listeners',                90, 'drop_partition', 'day',   'detail 90 days'),
+ ('snap_udp_endpoints',            90, 'drop_partition', 'day',   'detail 90 days'),
+ ('process_events',                90, 'drop_partition', 'day',   'detail 90 days'),
+ ('process_command_lines',         30, 'drop_partition', 'day',   'command lines 30 days, MS-SEC-09 (M-017)'),
+ ('agent_status',                  90, 'drop_partition', 'day',   'detail 90 days'),
+ ('inventory_snapshots',           90, 'drop_partition', 'day',   'full snapshots 90 days'),
+ ('inv_apps',                      90, 'drop_partition', 'day',   'full snapshots 90 days'),
+ ('inv_services',                  90, 'drop_partition', 'day',   'full snapshots 90 days'),
+ ('inv_tasks',                     90, 'drop_partition', 'day',   'full snapshots 90 days'),
+ ('inv_startup',                   90, 'drop_partition', 'day',   'full snapshots 90 days'),
+ ('inv_drivers',                   90, 'drop_partition', 'day',   'full snapshots 90 days'),
+ ('inv_roles',                     90, 'drop_partition', 'day',   'full snapshots 90 days'),
+ ('host_facts',                    90, 'drop_partition', 'day',   'full snapshots 90 days'),
+ ('inv_iis',                       90, 'drop_partition', 'day',   'full snapshots 90 days'),
+ ('inv_iis_sites',                 90, 'drop_partition', 'day',   'full snapshots 90 days'),
+ ('inv_iis_app_pools',             90, 'drop_partition', 'day',   'full snapshots 90 days'),
+ ('inv_sql_instances',             90, 'drop_partition', 'day',   'full snapshots 90 days'),
+ ('inv_server_apps',               90, 'drop_partition', 'day',   'full snapshots 90 days'),
+ ('inventory_changes',            730, 'drop_partition', 'day',   'changes 2 years'),
  ('inventory_link_index',          90, 'delete_rows',    NULL,    'diagnostics'),
  ('executables',                   90, 'delete_rows',    NULL,    'rows not seen for 90 days'),
  ('coverage_gaps',                730, 'delete_rows',    NULL,    '2 years'),
  ('agent_lifecycle',              730, 'delete_rows',    NULL,    '2 years'),
- ('quarantine',                    30, 'drop_partition', 'day',   '30 days per plan; 90 proposed (MPD-14)'),
+ ('quarantine',                    90, 'drop_partition', 'day',   '90 days, so provisional types outlive their wait (M-022)'),
  ('ingest_batches',                30, 'drop_partition', 'day',   'operations'),
- ('agent_heartbeats',              90, 'drop_partition', 'day',   '90 days (confirm)'),
+ ('agent_heartbeats',              90, 'drop_partition', 'day',   '90 days'),
  ('audit_log',                    730, 'delete_rows',    NULL,    '2 years, MS-SEC-08'),
- ('daily_host_destinations',      730, 'drop_partition', 'month', 'summaries 2 years (confirm)'),
- ('daily_host_listeners',         730, 'drop_partition', 'month', 'summaries 2 years (confirm)'),
- ('daily_host_processes',         730, 'drop_partition', 'month', 'summaries 2 years (confirm)'),
- ('daily_host_executables',       730, 'drop_partition', 'month', 'summaries 2 years (confirm)'),
- ('daily_host_traffic',           730, 'drop_partition', 'month', 'summaries 2 years (confirm)'),
- ('daily_host_inventory_changes', 730, 'drop_partition', 'month', 'summaries 2 years (confirm)'),
+ ('daily_host_destinations',      730, 'drop_partition', 'month', 'summaries 2 years'),
+ ('daily_host_listeners',         730, 'drop_partition', 'month', 'summaries 2 years'),
+ ('daily_host_processes',         730, 'drop_partition', 'month', 'summaries 2 years'),
+ ('daily_host_executables',       730, 'drop_partition', 'month', 'summaries 2 years'),
+ ('daily_host_traffic',           730, 'drop_partition', 'month', 'summaries 2 years'),
+ ('daily_host_inventory_changes', 730, 'drop_partition', 'month', 'summaries 2 years'),
  ('enrollment_failures',            7, 'delete_rows',    NULL,    'rate limiting only');
 
 -- MS-OPS-05: last run of each background job, for the health page.
