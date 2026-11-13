@@ -89,7 +89,8 @@ Also: `setup/env.sh`, `setup/lib.sh`, `setup/templates/`, `setup/sql/grants.sql`
 
 | Step | Result |
 | --- | --- |
-| 01 to 08 | not run yet |
+| 01 SSH key | **PASS** (2026-11-13), 5/5 checks; key ED25519 `SHA256:eG/2d0I8FdK8FA+c0NMj8rnPtb4wWnL1G01bMq70ddU`. Key-only login test from the PC: waiting for confirmation |
+| 02 to 08 | not run yet |
 | Schema gate | not run yet |
 
 ## Must requirements still open
