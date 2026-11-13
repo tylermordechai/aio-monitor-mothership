@@ -3,7 +3,7 @@
 **Status: approved (v1), 2026-11-13, at the milestone 1 review.** Nothing here is built yet. Agent milestone 5c (collector transport) is built against this document. Changes from here on are recorded as decisions (M-xxx) and keep `/api/v1`; a breaking change needs `/api/v2`.
 
 - Requirements: MS-ING-01 to MS-ING-11 (MS-ING-11 added at the review, M-018), plus MS-SEC-01..03, MS-SEC-10, MS-OPS-08. Agent side: AG-SEC-03/04/07, AG-DAT-01..04, AG-PRF-04/06, AG-CFG-01..03, AG-INV-16.
-- Decisions: M-001 to M-029 in [decisions.md](decisions.md); the review answers are M-017 and M-024 to M-028. Values still open (MPD-29 to MPD-31) are in [pending-decisions.md](pending-decisions.md), each with a recommendation.
+- Decisions: M-001 to M-038 in [decisions.md](decisions.md); the review answers are M-017, M-024 to M-028 and M-030 to M-032. Values still open are in [pending-decisions.md](pending-decisions.md), each with a recommendation.
 - Agent sources read for this contract (agent repo, `master`, 2026-11-13): `docs/status.md`, `docs/decisions.md` (D-004, D-008, D-016, D-039, D-060, D-071, D-073), `docs/agent-requirements.md`, `internal/config/identity.go`, `internal/output/jsonfile.go`, the record structs in `internal/netcollect`, `internal/proc` and `internal/inventory`.
 
 ## 1. Overview
@@ -16,7 +16,7 @@
 | `/api/v1/config` | GET | required | The agent's settings for its host group | MS-ING-07 |
 | `/api/v1/renew` | POST | required | New certificate before the current one expires | MS-ING-11 (Should), M-018 |
 
-- **Base URL:** `https://<mothership-ip>:8443`. There is no DNS name: agents and browsers use the mothership's fixed IP on 192.168.0.0/24, set when the VM is built (M-024). `<mothership-ip>` is a placeholder until then. Port 8443 serves agents only; the dashboard is on 443.
+- **Base URL:** `https://192.168.0.191:8443`. There is no DNS name: agents and browsers use the mothership's fixed IP, 192.168.0.191 (M-024). Port 8443 serves agents only; the dashboard is on 443.
 - **TLS:** **1.3 only on 8443** (M-019, MS-SEC-01); every agent is Go, which supports it. Port 443 keeps 1.2 or later for browsers. ECDHE with AEAD ciphers only.
 - **Server certificate on 8443:** issued by the private **agent CA**, which the agent pins (AG-SEC-04). The agent never trusts the Windows certificate store for 8443. See §2.4 and M-002.
 - **Client certificate:** Apache asks for one on every connection to 8443 (`SSLVerifyClient optional`, `SSLVerifyDepth 1`, CA = agent CA). `/api/v1/enroll` works without one; every other endpoint returns 401 without a valid one (M-001).
@@ -85,7 +85,7 @@
 
 The CSR's own signature must verify. `agent_id` must be a lower-case UUID version 4 (the agent's D-004 format, `^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`).
 
-**The server certificate for 8443** comes from the same agent CA, with `serverAuth` and the mothership's fixed IP as its only SAN (an `iPAddress` entry; no DNS name, M-024), and a 1-year lifetime *(confirm, MPD-29)*. One pinned CA then covers both directions (M-002).
+**The server certificate for 8443** comes from the same agent CA, with `serverAuth` and the mothership's fixed IP as its only SAN (an `iPAddress` entry; no DNS name, M-024), and a 1-year lifetime (M-030). One pinned CA then covers both directions (M-002).
 
 **Addressing by IP (M-024):** the agent connects to the IP and checks it against the certificate's `iPAddress` SAN (Go does this for an IP host). A client sends no SNI for an IP, so Apache picks the vhost by port alone: one vhost on 8443 (agent CA) and one on 443 (web CA). **Changing the mothership's IP** means reissuing both server certificates and changing the collector address on every agent, so the IP is treated as permanent once agents are enrolled.
 
@@ -220,7 +220,7 @@ Facts from the agent source (`internal/config/identity.go`, D-004, D-060, status
 | Gaps in `seq` | Normal | Nothing. The mothership never waits for a missing number |
 | Out-of-order arrival | Normal | Nothing (§3.3) |
 | New `agent_id` after a purge or a renamed folder | A new identity. In 5c the certificate and key live in the same data folder, so they are gone too, and the agent must enrol again | A new `agents` row, the same host row if `host_id` and `hostname` match. The old agent is marked `replaced` and stops counting as silent |
-| Same `agent_id`, counter rolled back | A new record can get the `seq` of an older one | The `(agent, seq, ts)` key keeps both, because their `ts` differ, so nothing is lost. The mothership notices when a stored, non-duplicate line has a `seq` below the agent's `max_seq_held` and is an `agent_start`, or when more than 1,000 *(confirm, MPD-29)* such lines arrive. It then sets `agents.seq_regression_at` and raises a health alert. Counting duplicates, and the dashboard's view of that agent, treat the rollback as a new run |
+| Same `agent_id`, counter rolled back | A new record can get the `seq` of an older one | The `(agent, seq, ts)` key keeps both, because their `ts` differ, so nothing is lost. The mothership notices when a stored, non-duplicate line has a `seq` below the agent's `max_seq_held` and is an `agent_start`, or when more than 1,000 (M-030) such lines arrive. It then sets `agents.seq_regression_at` and raises a health alert. Counting duplicates, and the dashboard's view of that agent, treat the rollback as a new run |
 | Two hosts with one certificate (a cloned VM) | Two `host_id`s, or one `host_id` with two hostnames, interleaved | `host_id_mismatch` quarantine (§3.4). Hostnames flipping back and forth raise a health alert |
 
 **Asked of agent 5c (M-005, M-020):** keep `seq` in the same protected state file, and keep the "reserve before use" rule. Optionally add a `seq_epoch` to `agent_start`: random, and new only when the state file is **created anew** (first install, purge, a folder renamed aside, a lost or corrupt file). It is a new optional field, so it keeps `schema_version` 1 (D-073).
@@ -235,7 +235,7 @@ Facts from the agent source (`internal/config/identity.go`, D-004, D-060, status
 - during an outage the agent keeps no heartbeats to resend later;
 - ingest keeps one meaning: a non-empty batch of records.
 
-**The agent sends it** every 60 s (D-079 accepted 60 s as the budget; *confirm, MPD-29*), whether or not it has records to send. It keeps sending heartbeats while ingest is backing off, so the dashboard can show "connected, 40 MB queued" instead of "silent". It stops only on 401 or 403.
+**The agent sends it** every 60 s (D-079, M-030), whether or not it has records to send. It keeps sending heartbeats while ingest is backing off, so the dashboard can show "connected, 40 MB queued" instead of "silent". It stops only on 401 or 403.
 
 Request: `Content-Type: application/json`, body at most 64 KB. **No `agent_id` field**: the certificate says who it is.
 
@@ -273,7 +273,7 @@ Each heartbeat updates the agent's check-in time, version and IP (MS-ING-08) and
 
 **Read-only for the agent.** It only changes agent settings, never the host (AG-SEC-07). With `If-None-Match` equal to the current ETag, the answer is `304 Not Modified` with no body.
 
-**When the agent fetches it:** at start, when a heartbeat's `config_etag` differs, and every 15 minutes *(confirm, MPD-29)* as a backstop. If a setting is missing or invalid, the agent keeps its built-in default for it (AG-CFG-02) and reports the problem in its heartbeat `health`.
+**When the agent fetches it:** at start, when a heartbeat's `config_etag` differs, and every 15 minutes (M-030) as a backstop. If a setting is missing or invalid, the agent keeps its built-in default for it (AG-CFG-02) and reports the problem in its heartbeat `health`.
 
 **200 OK**, with an `ETag` header:
 
@@ -309,7 +309,7 @@ Each heartbeat updates the agent's check-in time, version and IP (MS-ING-08) and
 
 ```http
 GET /api/v1/config HTTP/1.1
-Host: <mothership-ip>:8443
+Host: 192.168.0.191:8443
 User-Agent: aio-monitor-agent/0.5.0
 If-None-Match: "cfg-3-6"
 ```
@@ -351,7 +351,7 @@ These use `curl` with a client certificate, as the simulator and tests will. Rea
 
 ```http
 POST /api/v1/enroll HTTP/1.1
-Host: <mothership-ip>:8443
+Host: 192.168.0.191:8443
 Content-Type: application/json
 User-Agent: aio-monitor-agent/0.5.0
 
@@ -391,7 +391,7 @@ gzip -c batch.jsonl > batch.jsonl.gz
 curl --cert agent.crt --key agent.key --cacert agent-ca.crt \
   -H 'Content-Type: application/x-ndjson' -H 'Content-Encoding: gzip' \
   -H 'User-Agent: aio-monitor-agent/0.5.0' -H 'X-AIO-Batch-Id: 3f0c6d2e-7a51-4c1b-9f0a-0d2b8e6f1a77' \
-  --data-binary @batch.jsonl.gz https://<mothership-ip>:8443/api/v1/ingest
+  --data-binary @batch.jsonl.gz https://192.168.0.191:8443/api/v1/ingest
 ```
 
 ```json
@@ -432,7 +432,7 @@ Retry-After: 300
 
 ```http
 POST /api/v1/heartbeat HTTP/1.1
-Host: <mothership-ip>:8443
+Host: 192.168.0.191:8443
 Content-Type: application/json
 User-Agent: aio-monitor-agent/0.5.0
 

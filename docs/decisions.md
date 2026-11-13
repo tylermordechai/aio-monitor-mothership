@@ -190,7 +190,7 @@ Proposed in [ingest-api.md](ingest-api.md) and `db/migrations/0001_initial.sql`,
 
 ### M-024 No DNS name: the mothership is reached by its fixed IP; a second private CA for 443
 **Requirements:** MS-SEC-01, AG-SEC-04, MS-ING-06 · **Status:** Accepted 2026-11-13 (MPD-20)
-- **There is no local domain or DNS server.** Agents and browsers use the mothership's fixed IP on 192.168.0.0/24, set when the VM is built. Docs and config use the placeholder `<mothership-ip>` until then.
+- **There is no local domain or DNS server.** Agents and browsers use the mothership's fixed IP on 192.168.0.0/24: **192.168.0.191**, set when the VM was built (2026-11-13; `setup/env.sh`).
 - **Both server certificates** (8443 and 443) carry the IP as an `iPAddress` SAN and no DNS name.
 - **Two private CAs on the mothership:**
   - the **agent CA** (M-002): agent client certificates and the 8443 server certificate; agents pin it;
@@ -242,3 +242,93 @@ Proposed in [ingest-api.md](ingest-api.md) and `db/migrations/0001_initial.sql`,
 - **MariaDB's data directory on 26.04 is `/var/lib/mariadb`**, not `/var/lib/mysql`. Setup notes, AppArmor expectations, disk checks (MS-OPS-05, 08) and later backup paths (MS-OPS-01) use `/var/lib/mariadb`.
 - **The schema is unchanged:** it targets MariaDB 11.8 either way.
 - **PHP 8.5:** the code targets 8.5, and any library proposed later must support it.
+
+## Milestone 1: server setup (2026-11-13)
+
+### M-030 Minor defaults accepted
+**Requirements:** MS-ING-06, MS-ING-07, MS-ING-08 · **Status:** Accepted 2026-11-13 (MPD-29)
+- 8443 server certificate: 1 year from the agent CA, reissued 30 days before expiry (07-pki.sh reissues when run; a timer comes with milestone 4's health checks).
+- `seq` rollback alert: more than 1,000 non-duplicate lines below `max_seq_held`, or any `agent_start` below it.
+- Heartbeat every 60 s; config fetch backstop every 15 minutes.
+
+### M-031 Milestone 4 gate; the CA keys and app config are backed up before the pilot
+**Requirements:** MS-DAT-02, MS-DAT-03, MS-OPS-02, MS-OPS-05 · **Status:** Accepted 2026-11-13 (MPD-30)
+- **Milestone 4's gate**, on simulator data with the clock moved forward:
+  - partitions are created 7 days ahead and dropped exactly at each table's retention;
+  - nightly summaries match the detail they were built from;
+  - each health check (disk, database, ingest errors, quarantine growth, job last success, certificate expiry) fires when its condition is forced, and clears after.
+- **Before the pilot:** an encrypted copy of the two CA keys and the app config (`/etc/aio-mothership/`), kept off the VM, made once and again after any change (MS-OPS-02). Without it, losing the VM means re-enrolling every pilot agent by hand.
+- The rest of the backups stay a "before ready to ship" item (M-026).
+
+### M-032 DShield's terms checked before the threat lists are fetched
+**Requirements:** MS-ENR-03 · **Status:** Accepted 2026-11-13 (MPD-31)
+- Before milestone 6 enables the fetch, DShield's terms (a FireHOL Level 1 source) are checked and recorded in `threat_lists`.
+- If they don't fit and the DShield part can't be excluded, FireHOL Level 1 is disabled; Feodo Tracker and Spamhaus DROP already cover its other sources.
+
+### M-033 Server setup as numbered, idempotent scripts run by the owner
+**Requirements:** MS-OPS-07 · **Status:** Accepted 2026-11-13
+- `setup/NN-name.sh`, one job each, in order 01 to 08. Each one:
+  - starts with what it does, whether it needs sudo and whether it reboots;
+  - ends with checks that print PASS or FAIL, and `RESULT: PASS` or `RESULT: FAIL` (exit 1);
+  - is safe to run again.
+- **Shared parts:** `setup/env.sh` (IP 192.168.0.191, LAN, versions; nothing secret) and `setup/lib.sh` (banner, checks, template rendering). Config files are templates in `setup/templates/`, written only when they change.
+- **Claude never logs in to the VM.** The owner runs each script over SSH and pastes the output back. The scripts never print passwords or keys (MS-SEC-10).
+- **The repo** is cloned to `/opt/aio-mothership`, read-only. If the repo becomes private, the VM gets a read-only GitHub deploy key for this repo only (docs/setup.md). Nobody commits on the VM.
+- **`.gitattributes`** forces LF for scripts, SQL and config, since they're edited on Windows and run on Linux.
+
+### M-034 SSH: keys only, after the owner confirms key login
+**Requirements:** MS-SEC-01 · **Status:** Accepted 2026-11-13
+- `01-ssh-key.sh` (no sudo) adds the PC's key: ed25519 or ECDSA, or RSA of at least 3072 bits.
+- `02-ssh-hardening.sh` runs only with `--key-login-confirmed` and only if `authorized_keys` holds a key. It turns off password, keyboard-interactive and root login, and sets `AuthenticationMethods publickey`, in `/etc/ssh/sshd_config.d/10-aio-mothership.conf`.
+- That file is read before cloud-init's `50-…`, and sshd keeps the first value it reads, so a later file can't turn passwords back on. The check reads the effective settings (`sshd -T`).
+- The Unraid console still takes the password, which is the way back in if needed.
+
+### M-035 Updates and time
+**Requirements:** MS-SEC-12, MS-ING-05 · **Status:** Accepted 2026-11-13; automatic reboot *(confirm, MPD-32)*
+- `unattended-upgrades` installs Ubuntu's security updates daily. There is **no automatic reboot**: the script, and from milestone 4 the health checks, report when one is needed, and it is done by hand.
+- The clock runs in UTC with NTP sync (chrony or systemd-timesyncd, whichever Ubuntu installed). Certificates, the 24-hour timestamp window (M-007) and heartbeat skew depend on it.
+
+### M-036 MariaDB: local only, strict, three users with table-level grants
+**Requirements:** MS-SEC-04, MS-DAT-01, MS-ING-04 · **Status:** Accepted 2026-11-13; dashboard read of command lines *(MPD-34)*
+- **Install:** Ubuntu's `mariadb-server`. The script stops if a MariaDB.org apt source exists or the candidate isn't 11.8. The data lives in `/var/lib/mariadb`.
+- **Config** (`90-aio-mothership.cnf`):
+  - `bind-address 127.0.0.1`, `skip-name-resolve`, `local-infile 0`;
+  - UTC, utf8mb4, strict SQL mode, durable commits;
+  - a 3 GB buffer pool, to be tuned in milestone 2.
+- **Hardening:** no anonymous users, no test database, root only at localhost and only by unix socket.
+- **Migrations** are applied by the setup script as root over the socket (an admin action, not an application). Each is recorded in `schema_migrations` with its SHA-256. A changed file that was already applied is an error: changes go in a new migration. A failed first migration is redone with `--recreate-db`, which is refused once any agent exists. Output is kept in `/var/log/aio-mothership/migrations/`.
+- **Users** (`setup/sql/grants.sql`, revoked and granted again on every run):
+  - `aio_ingest`: INSERT only on record tables; SELECT, INSERT and UPDATE on identity and upsert tables; SELECT on groups, config and retention. It can't read records back, or read users, audit or alerts.
+  - `aio_dashboard`: SELECT on everything; writes users, alerts, allow-lists and the admin tables; **INSERT only** on `audit_log` (MS-SEC-08).
+  - `aio_maint`: data and DDL privileges on `aio` only, for partitions, retention, summaries and the other jobs.
+- **Passwords:** 40 random alphanumeric characters, in `/etc/aio-mothership/db/<user>.cnf` (600 root). They are never printed. In milestone 2 each PHP pool's group gets read access to its own file only.
+- **Checks** include negative grant tests, for example that ingest can't read `net_flows` and that the dashboard can't delete from `audit_log`.
+
+### M-037 PKI layout and the web CA's name constraint
+**Requirements:** MS-SEC-01, MS-SEC-02, M-002, M-024 · **Status:** Accepted 2026-11-13
+- **Agent CA** (P-384, 10 years, `pathlen:0`) in `/etc/aio-mothership/pki/agent-ca/`. Its key is `440 root:aio-signer`; `aio-signer` is the system user for the milestone 3 signing service. PHP pools can't read it (MS-SEC-02).
+- **Web CA** (P-384, 10 years) in `pki/web-ca/`, key `400 root`. Its critical name constraint permits only IP 192.168.0.0/24, DNS `invalid` and email `invalid`, so it can't sign for any real DNS name or any other address. The script proves this by trying to issue certificates for `example.com` and `10.0.0.1` and checking that verification fails.
+- **Server certificates** (P-256, `serverAuth`, only SAN `IP:192.168.0.191`): 8443 from the agent CA for 365 days; 443 from the web CA for 397 days. Their keys are `400 root`.
+- **A CA is never replaced by the script.** A server certificate is reissued when it's missing, expires within 30 days, carries another IP, or no longer chains to its CA.
+- Public copies and fingerprints are in `pki/public/`. The agent CA's SHA-256 is the MSI pin value.
+- No CRL yet: revocation is the database check (M-002), built in milestone 3.
+
+### M-038 Apache and PHP-FPM layout
+**Requirements:** MS-SEC-01, MS-SEC-04, MS-SEC-05, M-001, M-019 · **Status:** Accepted 2026-11-13
+- **Apache:**
+  - mpm_event with PHP over FastCGI; no mod_php, autoindex, status or CGI;
+  - **no port 80**: Listen is 443 and 8443 only;
+  - `ServerTokens Prod`, no TRACE, no session tickets.
+- **Two PHP-FPM pools under their own system users:** `aio-ingest` behind 8443 and `aio-dashboard` behind 443. The default `www` pool is off. Each pool will read only its own database credentials (MS-SEC-04).
+- **8443:**
+  - TLS 1.3 only, server certificate from the agent CA;
+  - `SSLVerifyClient optional`, `SSLVerifyDepth 1`, agent CA only;
+  - request body at most 11 MB;
+  - document root `public/agent/`.
+- **443:**
+  - TLS 1.2 and 1.3, ECDHE-ECDSA AEAD ciphers, server certificate from the web CA;
+  - strict headers (`nosniff`, `DENY` framing, no referrer, CSP `default-src 'none'`) until milestone 5 sets the dashboard's own;
+  - document root `public/dashboard/`.
+- **Separate document roots and pools,** so an agent endpoint can't be reached on 443 and the dashboard can't be reached on 8443.
+- **PHP:** `expose_php` off, errors logged but never shown, UTC, Secure, HttpOnly, SameSite=Strict, strict-mode session cookies (MS-SEC-05). Sessions are kept in a directory only the dashboard pool can read.
+- **Health pages** (`health.php`) read no database and no secret. On 8443 the page shows `client_verify`, so mTLS can be tested. The script tests it with a throwaway one-day certificate (CN `setup-selftest`, which is not a UUID and so can never act as an agent), and deletes it afterwards.

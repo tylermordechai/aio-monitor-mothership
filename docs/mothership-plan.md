@@ -70,7 +70,7 @@ Start the pilot VM at 4 vCPU, 16 GB RAM and a 250 GB disk on Unraid's SSD cache 
 
 **Names and certificates**
 
-- No DNS name: agents and the dashboard use the VM's fixed IP on 192.168.0.0/24, which goes into both server certificates as an IP SAN (decision M-024).
+- No DNS name: agents and the dashboard use the VM's fixed IP, 192.168.0.191, which goes into both server certificates as an IP SAN (decision M-024).
 - Two private CAs on the mothership: a **private agent CA** for agent client certificates and the 8443 server certificate, and a separate **web CA**, name-constrained to 192.168.0.0/24, for the 443 dashboard certificate; its CA certificate is imported on the admin PC (M-024).
 
 **Network and firewall** (ufw on the VM, plus your router or switch rules)
@@ -242,12 +242,12 @@ Seven milestones, one at a time, each ending in a test you can check; milestone 
 | 1 | Server and contract | VM, Apache, PHP, MariaDB, TLS, firewall; agent CA; `docs/ingest-api.md` and schema | API contract and schema approved by the user |
 | 2 | Ingest | Ingest endpoint, dedup, quarantine; agent simulator; size per host per day | 500 simulated hosts: p95 under 500 ms, 0 lost |
 | 3 | Enrolment | One-time tokens, certificate signing, revocation, agent check-ins | Revoked agent refused, silent agent flagged |
-| 4 | Retention | Daily partitions, retention, nightly summaries, health checks (backups moved to "before ready to ship", M-026) | Proposed in MPD-30 |
+| 4 | Retention | Daily partitions, retention, nightly summaries, health checks (backups moved to "before ready to ship", M-026) | On simulator data: partitions made 7 days ahead and dropped at retention; summaries match detail; each health check fires and clears (M-031) |
 | 5 | Dashboard core | Sign-in, roles, audit log, fleet overview, host detail | Every page under 5 s at 500 hosts, 7 days |
 | 6 | Dashboard full | Connections, history, search, export; enrichment: DNS, reputation | Views match agent data on simulator output |
 | 7 | Alerts and pilot | Alert rules, allow-lists; agent transport live on pilot hosts | Pilot go/no-go; privacy sign-off done |
 
-**Before ready to ship** (not a milestone gate): backups and a timed restore test, MS-OPS-01 to MS-OPS-04 (M-026).
+**Before the pilot:** an encrypted off-VM copy of the two CA keys and the app config (MS-OPS-02, M-031). **Before ready to ship** (not a milestone gate): the rest of the backups and a timed restore test, MS-OPS-01 to MS-OPS-04 (M-026).
 
 Milestones 1 to 6 are tested with an agent simulator, so they don't wait for the agent's transport milestone; real agents connect in milestone 7.
 

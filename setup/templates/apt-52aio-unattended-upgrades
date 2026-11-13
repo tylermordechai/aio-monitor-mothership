@@ -1,0 +1,7 @@
+// Managed by aio-mothership setup/03-os-updates.sh (MS-SEC-12, M-035).
+// Ubuntu's default origins (security updates) are kept. No automatic reboot:
+// a reboot needed is reported, and done by hand (MPD-32).
+Unattended-Upgrade::Automatic-Reboot "false";
+Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
+Unattended-Upgrade::Remove-Unused-Dependencies "true";
+Unattended-Upgrade::SyslogEnable "true";

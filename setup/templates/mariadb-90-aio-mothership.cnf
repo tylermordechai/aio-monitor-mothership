@@ -1,0 +1,18 @@
+# Managed by aio-mothership setup/06-mariadb.sh (M-036). Do not edit here.
+[mariadbd]
+# Local only: the apps use the socket; nothing listens on the network.
+bind-address            = 127.0.0.1
+skip-name-resolve
+local-infile            = 0
+# UTC and utf8mb4 everywhere (M-010).
+default-time-zone       = +00:00
+character-set-server    = utf8mb4
+collation-server        = utf8mb4_unicode_ci
+# Strict mode: a value that does not fit is an error, never a silent change (M-005).
+sql-mode                = STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION
+# Durable commits: acked_seq is sent only after COMMIT (MS-ING-04).
+innodb-flush-log-at-trx-commit = 1
+innodb-file-per-table   = 1
+# 8 GB VM: about 3 GB for InnoDB; re-check after the milestone 2 load test.
+innodb-buffer-pool-size = 3G
+max-connections         = 200
