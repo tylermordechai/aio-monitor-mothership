@@ -112,6 +112,7 @@ check "NOT listening on 80" not_listens_on 80
 check "443: health page over HTTPS with the web CA" body_has '"service":"dashboard"' --cacert "$WEBCA" "$URL_DASH"
 check "443: TLS 1.2 accepted" body_has '"tls_protocol":"TLSv1.2"' --cacert "$WEBCA" --tls-max 1.2 "$URL_DASH"
 check "443: TLS 1.3 accepted" body_has '"tls_protocol":"TLSv1.3"' --cacert "$WEBCA" "$URL_DASH"
+check "443: health page reports reboot_required (M-039)" body_has '"reboot_required":' --cacert "$WEBCA" "$URL_DASH"
 check_not "443: certificate NOT trusted via the agent CA" curl -sS --max-time 10 --cacert "$AGENTCA" "$URL_DASH"
 check "443: no PHP version header" php_version_hidden
 check "443: Server header is just 'Apache'" server_header_short

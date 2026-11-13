@@ -2,8 +2,8 @@
 
 **Status: approved (v1), 2026-11-13, at the milestone 1 review.** Nothing here is built yet. Agent milestone 5c (collector transport) is built against this document. Changes from here on are recorded as decisions (M-xxx) and keep `/api/v1`; a breaking change needs `/api/v2`.
 
-- Requirements: MS-ING-01 to MS-ING-11 (MS-ING-11 added at the review, M-018), plus MS-SEC-01..03, MS-SEC-10, MS-OPS-08. Agent side: AG-SEC-03/04/07, AG-DAT-01..04, AG-PRF-04/06, AG-CFG-01..03, AG-INV-16.
-- Decisions: M-001 to M-038 in [decisions.md](decisions.md); the review answers are M-017, M-024 to M-028 and M-030 to M-032. Values still open are in [pending-decisions.md](pending-decisions.md), each with a recommendation.
+- Requirements: MS-ING-01 to MS-ING-12 (MS-ING-11 added at the review, M-018; MS-ING-12 for the heartbeat, M-042), plus MS-SEC-01..03, MS-SEC-10, MS-OPS-08. Agent side: AG-SEC-03/04/07, AG-DAT-01..04, AG-PRF-04/06, AG-CFG-01..03, AG-INV-16.
+- Decisions: M-001 to M-042 in [decisions.md](decisions.md); the review answers are M-017, M-024 to M-028 and M-030 to M-032. Values still open are in [pending-decisions.md](pending-decisions.md), each with a recommendation.
 - Agent sources read for this contract (agent repo, `master`, 2026-11-13): `docs/status.md`, `docs/decisions.md` (D-004, D-008, D-016, D-039, D-060, D-071, D-073), `docs/agent-requirements.md`, `internal/config/identity.go`, `internal/output/jsonfile.go`, the record structs in `internal/netcollect`, `internal/proc` and `internal/inventory`.
 
 ## 1. Overview
@@ -12,7 +12,7 @@
 | --- | --- | --- | --- | --- |
 | `/api/v1/enroll` | POST | none | One-time token + CSR → client certificate | MS-ING-06 |
 | `/api/v1/ingest` | POST | required | gzip JSON Lines batch → `acked_seq` | MS-ING-01..05, 09, 10 |
-| `/api/v1/heartbeat` | POST | required | Liveness, version, health and queue size every 60 s | AG-PRF-06, MS-ING-08 |
+| `/api/v1/heartbeat` | POST | required | Liveness, version, health and queue size every 60 s | MS-ING-12, AG-PRF-06, MS-ING-08 |
 | `/api/v1/config` | GET | required | The agent's settings for its host group | MS-ING-07 |
 | `/api/v1/renew` | POST | required | New certificate before the current one expires | MS-ING-11 (Should), M-018 |
 
@@ -228,7 +228,7 @@ Facts from the agent source (`internal/config/identity.go`, D-004, D-060, status
 - **What `seq_epoch` detects:** a recreated state file that somehow keeps its `agent_id` (for example a hand-repaired file), so counting restarts under the same identity.
 - **What it can't detect: a VM snapshot revert.** The revert restores the old state file, and the old epoch with it, so the epoch looks unchanged. Snapshot reverts (and restored backups or clones) are caught only by the `(agent, seq, ts)` key and the regression check in the table above, which is why that check stays the primary mechanism.
 
-## 4. `POST /api/v1/heartbeat` (AG-PRF-06, MS-ING-08, M-006; agreed at the review)
+## 4. `POST /api/v1/heartbeat` (MS-ING-12, AG-PRF-06, MS-ING-08, M-006; agreed at the review)
 
 **Its own endpoint, not an empty ingest call:**
 - a heartbeat is about the agent now (its queue and its connection), not a host record, so it gets no `seq` and never waits in the queue;

@@ -2,22 +2,23 @@
 
 Last updated: 2026-11-13
 
-Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md); decisions are in [decisions.md](decisions.md) (M-001 to M-038); open items are in [pending-decisions.md](pending-decisions.md) (MPD-32 to MPD-34); working rules are in [../CLAUDE.md](../CLAUDE.md).
+Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md); decisions are in [decisions.md](decisions.md) (M-001 to M-042); open items are in [pending-decisions.md](pending-decisions.md) (none open); working rules are in [../CLAUDE.md](../CLAUDE.md).
 
 ## Pick up here
 
 - **The ingest contract (v1) is approved** (M-017). Agent 5c can build against it; the collector address is 192.168.0.191.
 - **The VM is built** (2026-11-13): Ubuntu Server 26.04.1 LTS at 192.168.0.191, user `aioadmin`, clean snapshot `M0-off`.
-- **Server setup scripts written, not yet run:** `setup/01` to `08` and [setup.md](setup.md) (M-033 to M-038). The owner runs them over SSH one at a time and pastes the output back. Claude never logs in to the VM.
-- **Next:** step 0 (clone the repo) and step 1 (`01-ssh-key.sh`), then wait for the owner to confirm key login before `02`.
+- **Server setup in progress:** `setup/01` to `08` and [setup.md](setup.md) (M-033 to M-039). 01 and 02 passed on the VM. The owner runs them over SSH one at a time and pastes the output back. Claude never logs in to the VM.
+- **Next:** step 3 (`03-os-updates.sh`), then 04 to 08 one at a time.
 - **The schema is approved once `06-mariadb.sh` prints `SCHEMA GATE: PASS`.** It hasn't been applied anywhere yet.
-- **Still open, not blocking:** MPD-32 (automatic reboot; default off), MPD-33 (MS-OPS-04 wording), MPD-34 (a separate analyst database user for command lines).
+- **MPD-32 to 34 answered** (M-039 to M-041): no automatic reboot, with "reboot required" shown by 03 and the dashboard health page; MS-OPS-04 reworded; an `aio_analyst` database user for command lines, details before milestone 5.
+- **The repo's plan copy and CLAUDE.md now match the decisions** (M-042), including the new MS-ING-12 (heartbeat, Must).
 
 ## Summary
 
 | Milestone | Scope | State |
 | --- | --- | --- |
-| 1 | Server and contract | **Contract approved** (2026-11-13, M-017). Setup scripts written (2026-11-13), not yet run. Schema approved when `06-mariadb.sh` passes |
+| 1 | Server and contract | **Contract approved** (2026-11-13, M-017). Setup in progress: 01 and 02 passed. Schema approved when `06-mariadb.sh` passes |
 | 2 | Ingest, simulator, load test | Not started |
 | 3 | Enrolment | Not started |
 | 4 | Retention (backups moved to "before ready to ship", M-026) | Not started |
@@ -66,7 +67,7 @@ Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md
 
 **How to check it:** `06-mariadb.sh` applies it on the VM and prints `SCHEMA GATE: PASS` or `FAIL`.
 
-## Milestone 1: server setup (written 2026-11-13, not yet run)
+## Milestone 1: server setup (written 2026-11-13, running)
 
 **What was written** (decisions M-033 to M-038; how to run it in [setup.md](setup.md)):
 
@@ -83,7 +84,7 @@ Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md
 
 Also: `setup/env.sh`, `setup/lib.sh`, `setup/templates/`, `setup/sql/grants.sql`, `public/{agent,dashboard}/health.php`, `.gitattributes` (LF for scripts).
 
-**Not tested yet:** none of it has run. There is no Ubuntu 26.04 machine here, so package names, paths and tool output are as documented for Ubuntu and checked by each script's own checks. The first runs may need small fixes.
+**Tested so far:** 01 and 02 on the VM; 03 to 08 not yet. There is no Ubuntu 26.04 machine here, so package names, paths and tool output are as documented for Ubuntu and checked by each script's own checks. The first runs may need small fixes.
 
 **Results:**
 
@@ -97,17 +98,17 @@ Also: `setup/env.sh`, `setup/lib.sh`, `setup/templates/`, `setup/sql/grants.sql`
 ## Must requirements still open
 
 All of them: nothing is built and tested yet.
-- The contract and schema cover the design of MS-ING-01 to 06, 08, 09 and MS-DAT-01, 02, 04, 05 (approved as design). MS-ING-11 (Should) was added.
+- The contract and schema cover the design of MS-ING-01 to 06, 08, 09, 12 and MS-DAT-01, 02, 04, 05 (approved as design). MS-ING-11 (Should) and MS-ING-12 (Must, heartbeat) were added.
 - The setup scripts, once run, will cover MS-SEC-01 (TLS, firewall), MS-SEC-02 (CA key access, as far as files go), MS-SEC-04 (database users) and MS-SEC-12 (automatic updates).
 - MS-ING-10 and MS-DAT-06 are measured in milestone 2.
 
 ## Next steps
 
-1. **The owner runs step 0 and step 1** of [setup.md](setup.md), confirms key login works, and pastes the output back.
-2. **Then 02 to 08 in order,** one at a time, fixing anything the output shows. `06` is the schema gate.
+1. **Steps 0 to 2 are done.**
+2. **Then 03 to 08 in order,** one at a time, fixing anything the output shows. `06` is the schema gate.
 3. **After 08:** import the web CA on the PC, and check `https://192.168.0.191/health.php`. Milestone 1 is then done; report it and wait for the go-ahead for milestone 2.
 4. **Agent 5c can start now** from the approved contract (ingest-api.md §10), collector address 192.168.0.191.
-5. **For the tech lead:** add MS-ING-11 and the new MS-ING-01 wording to `mothership-plan.md`, and `inventory_link_index` to CLAUDE.md's list of record types (M-016, M-018). Not done here.
+5. **For the tech lead:** the repo's `mothership-plan.md` and CLAUDE.md were updated (M-042); copy the changes to the master plan if it is kept elsewhere.
 
 ## Before the pilot (M-031)
 

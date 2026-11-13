@@ -64,7 +64,7 @@ Start the pilot VM at 4 vCPU, 16 GB RAM and a 250 GB disk on Unraid's SSD cache 
 **Unraid settings**
 
 - Put the VM's disk on the **cache pool (SSD/NVMe)**, not the parity array. Database writes on the array are slow and wear parity drives.
-- Network: **bridge (br0)** so the VM has its own address on your LAN. Give it a fixed IP (DHCP reservation or static).
+- Network: **bridge (br0)** so the VM has its own address on your LAN. Fixed IP **192.168.0.191** (M-024); no DNS name.
 - Turn on **autostart** for the VM, and have the Unraid host on a UPS so a power cut doesn't corrupt the database.
 - Don't rely on Unraid's VM disk snapshots for backups; a running database needs its own backup tool (see Operations).
 
@@ -86,11 +86,11 @@ Outbound from the VM: OS updates, and the enrichment feed downloads (MS-ENR). No
 
 ## Ingest API
 
-Agents send gzipped JSON Lines batches over mutual TLS; the mothership stores each batch in one transaction and replies with the highest sequence number it now holds. The contract is written to `docs/ingest-api.md` and reviewed before any code.
+Agents send gzipped JSON Lines batches over mutual TLS; the mothership stores each batch in one transaction and acknowledges exactly that request's lines (M-004). The contract is written to `docs/ingest-api.md` and reviewed before any code.
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| MS-ING-01 | `POST /api/v1/ingest` on port 8443 accepts a gzip JSON Lines body (max 10 MB compressed *(confirm)*) and returns `{"acked_seq": N}`. | Must |
+| MS-ING-01 | `POST /api/v1/ingest` on port 8443 accepts a gzip JSON Lines body (max 10 MB compressed *(confirm)*) and returns `{"acked_seq": N}`. A 200 acknowledges exactly the lines of that request (stored, duplicate or quarantined); `acked_seq` is the highest `seq` in it, a check for the agent, not a watermark (M-004). | Must |
 | MS-ING-02 | Client certificate required; the agent's identity is the certificate, and a batch whose `agent_id` differs from it is rejected. | Must |
 | MS-ING-03 | Idempotent: records are unique on `(agent_id, seq)`; resends are dropped without error. | Must |
 | MS-ING-04 | Each batch is stored in one database transaction; `acked_seq` is sent only after commit. | Must |
@@ -100,6 +100,8 @@ Agents send gzipped JSON Lines batches over mutual TLS; the mothership stores ea
 | MS-ING-08 | Every request updates the agent's last check-in time, version and source IP. | Must |
 | MS-ING-09 | Clear error codes: 400 bad batch, 401/403 certificate problems, 413 too large, 429 slow down (with Retry-After), 503 database unavailable. The agent retries 429 and 5xx with backoff. | Must |
 | MS-ING-10 | Keeps up with 500 agents each sending a batch every 10 s (50 requests/s), with p95 response under 500 ms. | Must |
+| MS-ING-11 | `POST /api/v1/renew`: an agent with a valid certificate gets a new one before the current one expires, without a new enrolment token (M-018). | Should |
+| MS-ING-12 | `POST /api/v1/heartbeat`: every agent sends its version, health and queue size every 60 s, even with nothing to send; no `seq`, never queued or resent; updates the check-in (MS-ING-08) and is kept 90 days (M-006, M-030, M-042). | Must |
 
 ## Data model
 
@@ -116,7 +118,8 @@ Each agent record type gets its own MariaDB table, big tables are split into one
 | Inventory (final, agent milestone 4): `inv_app`, `inv_service`, `inv_task`, `inv_startup`, `inv_driver`, `inv_role`, `host_facts`, `inventory_snapshot`, `inventory_change` | current state per host and type; `inventory_snapshots`; `inventory_changes` | Snapshots and changes: yes | Current state: always; full snapshots 90 days; changes 2 years *(confirm)* | host + type; item name; change time; product |
 | `agent_start`, `agent_stop` *(final; formats in the agent's status.md)* | `agent_lifecycle` | No | 2 years | host + time; `previous_exit` |
 | Server software (agent milestone 5b, built, sign-off pending): `inv_iis` (with its read status), `inv_iis_site`, `inv_iis_app_pool`, `inv_sql_instance`, `inv_server_app`; plus an optional `app` link on `inv_service`, `inv_iis_app_pool`, `inv_sql_instance`, `tcp_listener` and `udp_endpoint` | own migration; formats in the agent's status.md; create now, adjust only if 5b sign-off changes them | — | current state; changes 2 years, like inventory | host; port; product; `match_source` (guessed or confirmed) |
-| anything unrecognised, or a provisional type with no table yet | `quarantine` | Yes | 30 days | reason |
+| `inventory_link_index` (agent milestone 5b; M-016) | `inventory_link_index` | No | 90 days | host + time |
+| anything unrecognised, or a provisional type with no table yet | `quarantine` | Yes | 90 days (M-021) | reason |
 
 **Mothership's own tables:** `hosts` (MachineGuid, hostname, group, first and last seen), `agents` (agent ID, certificate fingerprint, version, check-in, revoked), `enrollment_tokens`, `ip_enrichment`, `alerts`, `alert_rules`, `users`, `audit_log`, `daily_*` summaries.
 
@@ -209,8 +212,8 @@ When the mothership is down, agents keep collecting and buffer up to 500 MB each
 | MS-OPS-01 | Nightly full database backup with `mariabackup` (consistent while running), plus binary logs for point-in-time recovery, written to an Unraid array share. | Must |
 | MS-OPS-02 | Agent CA key, server certificates and app config backed up separately, encrypted, and kept off the VM. | Must |
 | MS-OPS-03 | One backup copy leaves the Unraid server (another machine or offsite), so one failed box can't lose everything. | Should |
-| MS-OPS-04 | A restore is tested to a fresh VM before the pilot and every quarter; time taken is recorded. | Must |
-| MS-OPS-05 | Health page and checks: disk free, database up, ingest rate and errors, quarantine count, enrichment and nightly job last success, certificate expiry within 30 days. | Must |
+| MS-OPS-04 | A restore is tested to a fresh VM before ready to ship and every quarter after; time taken is recorded. Before the pilot, the CA keys and app config copy (MS-OPS-02) is checked by decrypting it and comparing it with the VM (M-040). | Must |
+| MS-OPS-05 | Health page and checks: disk free, database up, ingest rate and errors, quarantine count, enrichment and nightly job last success, certificate expiry within 30 days, and a pending OS reboot (`/var/run/reboot-required`; M-039). | Must |
 | MS-OPS-06 | Health problems raise alerts in the dashboard (MS-ALR) and, once added, by email. | Should |
 | MS-OPS-07 | The whole server can be rebuilt from the repo: `docs/setup.md`, Apache config, systemd timers, migrations, and a restore from backup. | Must |
 | MS-OPS-08 | Disk filling up: ingest returns 503 at 90% full so agents keep buffering, rather than the database crashing. | Must |

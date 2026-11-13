@@ -5,7 +5,7 @@
 # Needs sudo: yes. Reboots: no. It prints whether a reboot is needed; then
 # reboot by hand (sudo reboot) and run it again to confirm.
 # Safe to re-run: yes.
-# Requirements: MS-SEC-12, M-035.
+# Requirements: MS-SEC-12, MS-OPS-05, M-035, M-039.
 
 source "$(dirname "$0")/lib.sh"
 need_root
@@ -42,8 +42,8 @@ check "Unattended-Upgrade::Automatic-Reboot is false" apt_is Unattended-Upgrade:
 check "apt-daily-upgrade.timer enabled" systemctl is-enabled --quiet apt-daily-upgrade.timer
 check "unattended-upgrade dry run succeeds" unattended-upgrade --dry-run
 if [[ -f /var/run/reboot-required ]]; then
-    fail "reboot needed ($(tr '\n' ' ' < /var/run/reboot-required.pkgs 2>/dev/null || echo 'see /var/run/reboot-required')). Run: sudo reboot, then run this script again"
+    fail "reboot required ($(tr '\n' ' ' < /var/run/reboot-required.pkgs 2>/dev/null || echo 'see /var/run/reboot-required')). Run: sudo reboot, then run this script again"
 else
-    pass "no reboot needed"
+    pass "no reboot required"
 fi
 finish

@@ -1,6 +1,6 @@
 # Server setup
 
-How to build the mothership VM from this repo (MS-OPS-07). The decisions behind each step are M-033 to M-038 in [decisions.md](decisions.md).
+How to build the mothership VM from this repo (MS-OPS-07). The decisions behind each step are M-033 to M-039 in [decisions.md](decisions.md).
 
 - **The VM:** Ubuntu Server 26.04.1 LTS at **192.168.0.191** on Unraid (2 vCPU, 8 GB, 100 GB, bridged), user `aioadmin` with sudo. Clean snapshot: `M0-off`.
 - **The network:** the owner's PC and the test servers are on 192.168.0.0/24. Nothing else may reach the VM (M-025).
@@ -140,7 +140,7 @@ The first must print `STILL OK`. The second must be refused with `Permission den
 sudo bash setup/03-os-updates.sh 2>&1 | tee ~/setup-logs/03.log
 ```
 
-If it ends with `FAIL: reboot needed`, run `sudo reboot`, log in again, and run it once more. It should then pass. Later, the health checks (milestone 4) show when a reboot is pending. Security updates install themselves daily, and **nothing reboots on its own** (MPD-32).
+If it ends with `FAIL: reboot required`, run `sudo reboot`, log in again, and run it once more. It should then pass. After step 8 the dashboard health page shows `"reboot_required"` too, and milestone 4 makes it a health check. Security updates install themselves daily, and **nothing reboots on its own** (M-039).
 
 ## Step 4: time (`04-time.sh`)
 

@@ -284,7 +284,7 @@ Proposed in [ingest-api.md](ingest-api.md) and `db/migrations/0001_initial.sql`,
 - The Unraid console still takes the password, which is the way back in if needed.
 
 ### M-035 Updates and time
-**Requirements:** MS-SEC-12, MS-ING-05 · **Status:** Accepted 2026-11-13; automatic reboot *(confirm, MPD-32)*
+**Requirements:** MS-SEC-12, MS-ING-05 · **Status:** Accepted 2026-11-13; no automatic reboot confirmed (M-039)
 - `unattended-upgrades` installs Ubuntu's security updates daily. There is **no automatic reboot**: the script, and from milestone 4 the health checks, report when one is needed, and it is done by hand.
 - The clock runs in UTC with NTP sync (chrony or systemd-timesyncd, whichever Ubuntu installed). Certificates, the 24-hour timestamp window (M-007) and heartbeat skew depend on it.
 
@@ -332,3 +332,34 @@ Proposed in [ingest-api.md](ingest-api.md) and `db/migrations/0001_initial.sql`,
 - **Separate document roots and pools,** so an agent endpoint can't be reached on 443 and the dashboard can't be reached on 8443.
 - **PHP:** `expose_php` off, errors logged but never shown, UTC, Secure, HttpOnly, SameSite=Strict, strict-mode session cookies (MS-SEC-05). Sessions are kept in a directory only the dashboard pool can read.
 - **Health pages** (`health.php`) read no database and no secret. On 8443 the page shows `client_verify`, so mTLS can be tested. The script tests it with a throwaway one-day certificate (CN `setup-selftest`, which is not a UUID and so can never act as an agent), and deletes it afterwards.
+
+## Open items answered (2026-11-13)
+
+### M-039 No automatic reboot; a pending reboot is reported
+**Requirements:** MS-SEC-12, MS-OPS-05 · **Status:** Accepted 2026-11-13 (MPD-32)
+- Security updates install daily; **the VM never reboots on its own**. The owner reboots by hand.
+- **`/var/run/reboot-required` is reported in two places:**
+  - `03-os-updates.sh` ends with `FAIL: reboot required (...)` and the packages that asked for it;
+  - the dashboard health page (`https://192.168.0.191/health.php`) shows `"reboot_required": true|false`. 08 checks the field is there.
+- MS-OPS-05 lists a pending reboot among the health checks, so milestone 4 builds it as a real check that fires and clears.
+
+### M-040 MS-OPS-04 reworded
+**Requirements:** MS-OPS-02, MS-OPS-04 · **Status:** Accepted 2026-11-13 (MPD-33)
+- MS-OPS-04 now reads: a restore is tested to a fresh VM **before ready to ship and every quarter after**, with the time recorded.
+- Before the pilot, the CA keys and app config copy (MS-OPS-02, M-031) is checked by decrypting it and comparing it with the VM.
+
+### M-041 A separate analyst database user for command lines
+**Requirements:** MS-SEC-04, MS-SEC-07, MS-SEC-08 · **Status:** Accepted 2026-11-13 (MPD-34); details before milestone 5
+- A fourth user, `aio_analyst`, will be the only one that can read `process_command_lines`. `aio_dashboard` loses SELECT on that table, so a bug in a viewer page can't read command lines.
+- **Decided before milestone 5 builds the views:** the exact grants (whether `aio_analyst` also writes `audit_log`), how the dashboard picks the connection per request, and the credentials file name.
+- Until then `grants.sql` is unchanged; nothing reads the table before milestone 5.
+
+### M-042 The repo's plan copy updated; heartbeat is MS-ING-12
+**Requirements:** MS-ING-01, 11, 12, MS-DAT-01, MS-OPS-04 · **Status:** Accepted 2026-11-13 (owner)
+- `docs/mothership-plan.md` and `CLAUDE.md` now match the accepted decisions:
+  - the MS-ING-01 wording (M-004);
+  - MS-ING-11 renew (Should, M-018) and new **MS-ING-12 heartbeat (Must)**;
+  - the `inventory_link_index` row (90 days, M-016) and quarantine kept 90 days (M-021);
+  - the platform, fixed IP, no DNS, two CAs and firewall (M-024, M-025, M-029);
+  - MS-OPS-04 (M-040) and the milestone 4 gate (M-031).
+- The heartbeat already had its own endpoint in the contract (M-006); MS-ING-12 gives it a requirement ID. ingest-api.md now cites it. The contract itself is unchanged.
