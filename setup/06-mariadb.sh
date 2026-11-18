@@ -31,7 +31,7 @@ sql() { mariadb --batch --skip-column-names -e "$1"; }
 if grep -rqsE 'mariadb\.org|mirror\.mariadb|downloads\.mariadb' /etc/apt/sources.list /etc/apt/sources.list.d/; then
     die "a MariaDB.org apt source is configured; M-029 uses Ubuntu's own package only. Remove it first."
 fi
-apt-get update -q
+apt_get update -q
 CANDIDATE=$(apt-cache policy mariadb-server | awk '/Candidate:/{print $2}')
 info "mariadb-server candidate: $CANDIDATE"
 [[ "$CANDIDATE" == *":$AIO_MARIADB_SERIES."* || "$CANDIDATE" == "$AIO_MARIADB_SERIES."* ]] \

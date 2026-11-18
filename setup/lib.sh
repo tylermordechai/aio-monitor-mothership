@@ -55,9 +55,18 @@ file_mode_is() {
     [[ "$(stat -c '%a %U %G' "$1" 2>/dev/null)" == "$2 $3 $4" ]]
 }
 
+# apt-get that never touches the terminal: stdin from /dev/null and no dpkg
+# pty. On the VM (2026-11-18), apt-get run as "sudo bash 0N.sh | tee log" was
+# twice left stopped (state T) after a package's postinst, until kill -CONT.
+# apt saves and restores the terminal's settings around dpkg; under Ubuntu
+# 26.04's sudo, inside a pipeline, that can stop it. See status.md, step 03.
+apt_get() {
+    DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get -o Dpkg::Use-Pty=0 "$@" </dev/null
+}
+
 # Install apt packages non-interactively; never prompts, keeps local config.
 apt_install() {
-    DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get install -y -q \
+    apt_get install -y -q \
         -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold "$@"
 }
 

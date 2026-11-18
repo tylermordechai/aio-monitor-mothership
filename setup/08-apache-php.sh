@@ -20,7 +20,7 @@ for f in "$PKI/server/agent-api.crt" "$PKI/server/dashboard.crt" "$PKI/public/ag
 done
 
 # --- Packages (Ubuntu archive only) --------------------------------------------
-apt-get update -q
+apt_get update -q
 apt_install apache2 php-fpm php-cli php-mysql curl
 PHPV=$(php -r 'echo PHP_MAJOR_VERSION . "." . PHP_MINOR_VERSION;')
 [[ "$PHPV" == "$AIO_PHP_VERSION" ]] || die "PHP $PHPV installed, expected $AIO_PHP_VERSION (M-029)"

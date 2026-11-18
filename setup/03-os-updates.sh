@@ -17,11 +17,11 @@ info "OS: $PRETTY_NAME"
 
 export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a
 info "apt-get update"
-apt-get update -q
+apt_get update -q
 info "apt-get full-upgrade"
-apt-get full-upgrade -y -q -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold
+apt_get full-upgrade -y -q -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold
 apt_install unattended-upgrades
-apt-get autoremove -y -q
+apt_get autoremove -y -q
 
 render apt-20auto-upgrades /etc/apt/apt.conf.d/20auto-upgrades || info "20auto-upgrades already up to date"
 render apt-52aio-unattended-upgrades /etc/apt/apt.conf.d/52aio-unattended-upgrades || info "52aio-unattended-upgrades already up to date"

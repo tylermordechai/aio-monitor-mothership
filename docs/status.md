@@ -92,7 +92,7 @@ Also: `setup/env.sh`, `setup/lib.sh`, `setup/templates/`, `setup/sql/grants.sql`
 | --- | --- |
 | 01 SSH key | **PASS** (2026-11-13), 5/5 checks; key ED25519 `SHA256:eG/2d0I8FdK8FA+c0NMj8rnPtb4wWnL1G01bMq70ddU`. Fingerprint and key-only login confirmed from the PC |
 | 02 SSH keys only | **Passed** (2026-11-13), per the owner: key login works, password login refused (`Permission denied (publickey)`). Script output not pasted |
-| 03 OS updates | **PASS** (2026-11-18), 8/8 checks, no reboot required. During `full-upgrade`, `apt-get` sat paused (state `T`) for 25 min after `update-initramfs` for kernel 7.0.0-43; resumed with `kill -CONT`, then finished normally. Cause not known yet (a Ctrl+Z is the likely one); watch for it in 06 and 08, which also install packages |
+| 03 OS updates | **PASS** (2026-11-18), 8/8 checks, no reboot required. During `full-upgrade`, `apt-get` sat paused (state `T`) for 25 min after `update-initramfs` for kernel 7.0.0-43; resumed with `kill -CONT`, then finished normally. Happened again in 06 (`apt-get install mariadb-server`, 20 min), so not a Ctrl+Z: apt touching the terminal under `sudo ... | tee`. Fixed after 06 started: every apt call now goes through `apt_get` in `lib.sh` (stdin from `/dev/null`, `Dpkg::Use-Pty=0`) |
 | 04 Time | **PASS** (2026-11-18), 4/4 checks: Etc/UTC, chrony running, clock synchronised |
 | 05 Firewall | **PASS** (2026-11-18), 8/8 checks: ufw active, deny incoming, 22, 443 and 8443 from 192.168.0.0/24 only, no other allow rules, enabled at boot. SSH session from 192.168.0.54 kept |
 | 06 to 08 | not run yet |
