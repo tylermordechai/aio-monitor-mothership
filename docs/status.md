@@ -8,9 +8,9 @@ Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md
 
 - **The ingest contract (v1) is approved** (M-017). Agent 5c can build against it; the collector address is 192.168.0.191.
 - **The VM is built** (2026-11-13): Ubuntu Server 26.04.1 LTS at 192.168.0.191, user `aioadmin`, clean snapshot `M0-off`.
-- **Server setup in progress:** `setup/01` to `08` and [setup.md](setup.md) (M-033 to M-039). 01 to 05 passed on the VM. The owner runs them over SSH one at a time and pastes the output back. Claude never logs in to the VM.
-- **Next:** step 6 (`06-mariadb.sh`, the schema gate), then 07 and 08.
-- **The schema is approved once `06-mariadb.sh` prints `SCHEMA GATE: PASS`.** It hasn't been applied anywhere yet.
+- **Server setup in progress:** `setup/01` to `08` and [setup.md](setup.md) (M-033 to M-039). 01 to 06 passed on the VM. The owner runs them over SSH one at a time and pastes the output back. Claude never logs in to the VM.
+- **Next:** step 7 (`07-pki.sh`), then 08.
+- **The schema is approved** (2026-11-18): `06-mariadb.sh` printed `SCHEMA GATE: PASS` on MariaDB 11.8.6 from Ubuntu (M-017). Milestone 1's gate (contract and schema approved) is met; 07 and 08 remain.
 - **MPD-32 to 34 answered** (M-039 to M-041): no automatic reboot, with "reboot required" shown by 03 and the dashboard health page; MS-OPS-04 reworded; an `aio_analyst` database user for command lines, details before milestone 5.
 - **The repo's plan copy and CLAUDE.md now match the decisions** (M-042), including the new MS-ING-12 (heartbeat, Must).
 
@@ -18,7 +18,7 @@ Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md
 
 | Milestone | Scope | State |
 | --- | --- | --- |
-| 1 | Server and contract | **Contract approved** (2026-11-13, M-017). Setup in progress: 01 to 05 passed. Schema approved when `06-mariadb.sh` passes |
+| 1 | Server and contract | **Contract approved** (2026-11-13, M-017). **Schema approved** (2026-11-18, schema gate passed). Setup in progress: 01 to 06 passed |
 | 2 | Ingest, simulator, load test | Not started |
 | 3 | Enrolment | Not started |
 | 4 | Retention (backups moved to "before ready to ship", M-026) | Not started |
@@ -84,7 +84,7 @@ Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md
 
 Also: `setup/env.sh`, `setup/lib.sh`, `setup/templates/`, `setup/sql/grants.sql`, `public/{agent,dashboard}/health.php`, `.gitattributes` (LF for scripts).
 
-**Tested so far:** 01 to 05 on the VM; 06 to 08 not yet. There is no Ubuntu 26.04 machine here, so package names, paths and tool output are as documented for Ubuntu and checked by each script's own checks. The first runs may need small fixes.
+**Tested so far:** 01 to 06 on the VM; 07 and 08 not yet. There is no Ubuntu 26.04 machine here, so package names, paths and tool output are as documented for Ubuntu and checked by each script's own checks. The first runs may need small fixes.
 
 **Results:**
 
@@ -95,8 +95,9 @@ Also: `setup/env.sh`, `setup/lib.sh`, `setup/templates/`, `setup/sql/grants.sql`
 | 03 OS updates | **PASS** (2026-11-18), 8/8 checks, no reboot required. During `full-upgrade`, `apt-get` sat paused (state `T`) for 25 min after `update-initramfs` for kernel 7.0.0-43; resumed with `kill -CONT`, then finished normally. Happened again in 06 (`apt-get install mariadb-server`, 20 min), so not a Ctrl+Z: apt touching the terminal under `sudo ... | tee`. Fixed after 06 started: every apt call now goes through `apt_get` in `lib.sh` (stdin from `/dev/null`, `Dpkg::Use-Pty=0`) |
 | 04 Time | **PASS** (2026-11-18), 4/4 checks: Etc/UTC, chrony running, clock synchronised |
 | 05 Firewall | **PASS** (2026-11-18), 8/8 checks: ufw active, deny incoming, 22, 443 and 8443 from 192.168.0.0/24 only, no other allow rules, enabled at boot. SSH session from 192.168.0.54 kept |
-| 06 to 08 | not run yet |
-| Schema gate | not run yet |
+| 06 MariaDB | **PASS** (2026-11-18), 38/38 checks, including 14 grant checks (each user can do its job and nothing more, MS-SEC-04). MariaDB 11.8.6-MariaDB-5ubuntu0.1. apt paused once more during the install (before the fix), resumed with `kill -CONT` |
+| 07 and 08 | not run yet |
+| Schema gate | **PASS** (2026-11-18): `db/migrations` applied cleanly. Schema approved (M-017) |
 
 ## Must requirements still open
 
@@ -107,8 +108,8 @@ All of them: nothing is built and tested yet.
 
 ## Next steps
 
-1. **Steps 0 to 5 are done.**
-2. **Then 06 to 08 in order,** one at a time, fixing anything the output shows. `06` is the schema gate.
+1. **Steps 0 to 6 are done;** the schema gate passed.
+2. **Then 07 and 08,** one at a time, fixing anything the output shows.
 3. **After 08:** import the web CA on the PC, and check `https://192.168.0.191/health.php`. Milestone 1 is then done; report it and wait for the go-ahead for milestone 2.
 4. **Agent 5c can start now** from the approved contract (ingest-api.md §10), collector address 192.168.0.191.
 5. **For the tech lead:** the repo's `mothership-plan.md` and CLAUDE.md were updated (M-042); copy the changes to the master plan if it is kept elsewhere.
