@@ -56,7 +56,10 @@ a2dismod -q -f mpm_prefork "php$PHPV" >/dev/null 2>&1 || true
 a2dismod -q -f status autoindex >/dev/null 2>&1 || true
 a2enmod -q mpm_event ssl proxy proxy_fcgi setenvif headers socache_shmcb >/dev/null
 a2dissite -q 000-default default-ssl >/dev/null 2>&1 || true
-a2disconf -q serve-cgi-bin "php$PHPV-fpm" >/dev/null 2>&1 || true
+# Ubuntu's security.conf (ServerTokens OS, ServerSignature On) loads after
+# aio-mothership.conf and would override it; aio-mothership.conf sets all of
+# what it sets.
+a2disconf -q serve-cgi-bin "php$PHPV-fpm" security >/dev/null 2>&1 || true
 
 render apache-ports.conf /etc/apache2/ports.conf || true
 render apache-aio-mothership.conf /etc/apache2/conf-available/aio-mothership.conf || true
@@ -90,7 +93,7 @@ body_has() { local out; out=$(curl -sS --max-time 10 "${@:2}") && grep -q "$1" <
 listens_on() { ss -Hltn | awk '{print $4}' | grep -Eq "(^|:)$1\$"; }
 not_listens_on() { ! listens_on "$1"; }
 php_version_hidden() { ! curl -sS -o /dev/null -D - --max-time 10 --cacert "$WEBCA" "$URL_DASH" | grep -qi '^x-powered-by'; }
-server_header_short() { curl -sS -o /dev/null -D - --max-time 10 --cacert "$WEBCA" "$URL_DASH" | grep -i '^server:' | grep -qi '^server: apache\s*$'; }
+server_header_short() { curl -sS -o /dev/null -D - --max-time 10 --cacert "$WEBCA" "$URL_DASH" | tr -d '\r' | grep -i '^server:' | grep -qix 'server: apache'; }
 
 echo
 info "Health pages"

@@ -97,7 +97,7 @@ Also: `setup/env.sh`, `setup/lib.sh`, `setup/templates/`, `setup/sql/grants.sql`
 | 05 Firewall | **PASS** (2026-11-18), 8/8 checks: ufw active, deny incoming, 22, 443 and 8443 from 192.168.0.0/24 only, no other allow rules, enabled at boot. SSH session from 192.168.0.54 kept |
 | 06 MariaDB | **PASS** (2026-11-18), 38/38 checks, including 14 grant checks (each user can do its job and nothing more, MS-SEC-04). MariaDB 11.8.6-MariaDB-5ubuntu0.1. apt paused once more during the install (before the fix), resumed with `kill -CONT` |
 | 07 PKI | **PASS** (2026-11-18), 17/17 checks: key modes (MS-SEC-02), P-384 CAs and P-256 server keys, chains, the web CA's name constraint refuses `DNS:example.com` and `IP:10.0.0.1`. Agent CA and web CA valid to 2036-11-15; agent-api certificate to 2027-11-18, dashboard to 2027-12-20 |
-| 08 | not run yet |
+| 08 Apache and PHP | First run (2026-11-18): 23/24. All TLS, mTLS, pool and port checks passed (8443 TLS 1.3 only, client cert SUCCESS and NONE, TLS 1.2 refused, nothing on 80); `reboot_required` shown. **FAIL: Server header not just `Apache`.** Likely cause: Ubuntu's `security.conf` (ServerTokens OS) loads after `aio-mothership.conf` and overrides it. Fix: 08 disables `security.conf`; the check now ignores the header's CR. Re-run pending. apt did not pause (the `apt_get` fix) |
 | Schema gate | **PASS** (2026-11-18): `db/migrations` applied cleanly. Schema approved (M-017) |
 
 ## Public fingerprints (from 07-pki.sh, 2026-11-18; not secret)
