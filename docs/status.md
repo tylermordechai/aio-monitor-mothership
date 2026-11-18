@@ -9,7 +9,7 @@ Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md
 - **Milestone 1 is done** (2026-11-18). Waiting for the owner's go-ahead for milestone 2; nothing of milestone 2 is started.
 - **The ingest contract (v1) is approved** (M-017). Agent 5c can build against it; the collector address is 192.168.0.191.
 - **The schema is approved** (2026-11-18): `06-mariadb.sh` printed `SCHEMA GATE: PASS` on MariaDB 11.8.6 from Ubuntu (M-017).
-- **The server is set up:** all of `setup/01` to `08` passed on the VM (Ubuntu Server 26.04.1 LTS, 192.168.0.191), run by the owner over SSH. The web CA is trusted on the owner's PC, and `https://192.168.0.191/health.php` loads.
+- **The server is set up:** all of `setup/01` to `08` passed on the VM (Ubuntu Server 26.04.1 LTS, 192.168.0.191), run by the owner over SSH. The web CA is trusted on the owner's PC (thumbprint matched), and `https://192.168.0.191/health.php` loads with no certificate warning. Snapshot `M1-done` to be taken before milestone 2.
 - **No decisions are open.** MPD-32 to 34 were answered as M-039 to M-041; the plan copy and CLAUDE.md match the decisions (M-042).
 
 ## Summary
