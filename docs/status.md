@@ -8,8 +8,8 @@ Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md
 
 - **The ingest contract (v1) is approved** (M-017). Agent 5c can build against it; the collector address is 192.168.0.191.
 - **The VM is built** (2026-11-13): Ubuntu Server 26.04.1 LTS at 192.168.0.191, user `aioadmin`, clean snapshot `M0-off`.
-- **Server setup in progress:** `setup/01` to `08` and [setup.md](setup.md) (M-033 to M-039). 01 to 06 passed on the VM. The owner runs them over SSH one at a time and pastes the output back. Claude never logs in to the VM.
-- **Next:** step 7 (`07-pki.sh`), then 08.
+- **Server setup in progress:** `setup/01` to `08` and [setup.md](setup.md) (M-033 to M-039). 01 to 07 passed on the VM. The owner runs them over SSH one at a time and pastes the output back. Claude never logs in to the VM.
+- **Next:** step 8 (`08-apache-php.sh`), then the web CA import on the PC.
 - **The schema is approved** (2026-11-18): `06-mariadb.sh` printed `SCHEMA GATE: PASS` on MariaDB 11.8.6 from Ubuntu (M-017). Milestone 1's gate (contract and schema approved) is met; 07 and 08 remain.
 - **MPD-32 to 34 answered** (M-039 to M-041): no automatic reboot, with "reboot required" shown by 03 and the dashboard health page; MS-OPS-04 reworded; an `aio_analyst` database user for command lines, details before milestone 5.
 - **The repo's plan copy and CLAUDE.md now match the decisions** (M-042), including the new MS-ING-12 (heartbeat, Must).
@@ -18,7 +18,7 @@ Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md
 
 | Milestone | Scope | State |
 | --- | --- | --- |
-| 1 | Server and contract | **Contract approved** (2026-11-13, M-017). **Schema approved** (2026-11-18, schema gate passed). Setup in progress: 01 to 06 passed |
+| 1 | Server and contract | **Contract approved** (2026-11-13, M-017). **Schema approved** (2026-11-18, schema gate passed). Setup in progress: 01 to 07 passed |
 | 2 | Ingest, simulator, load test | Not started |
 | 3 | Enrolment | Not started |
 | 4 | Retention (backups moved to "before ready to ship", M-026) | Not started |
@@ -84,7 +84,7 @@ Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md
 
 Also: `setup/env.sh`, `setup/lib.sh`, `setup/templates/`, `setup/sql/grants.sql`, `public/{agent,dashboard}/health.php`, `.gitattributes` (LF for scripts).
 
-**Tested so far:** 01 to 06 on the VM; 07 and 08 not yet. There is no Ubuntu 26.04 machine here, so package names, paths and tool output are as documented for Ubuntu and checked by each script's own checks. The first runs may need small fixes.
+**Tested so far:** 01 to 07 on the VM; 08 not yet. There is no Ubuntu 26.04 machine here, so package names, paths and tool output are as documented for Ubuntu and checked by each script's own checks. The first runs may need small fixes.
 
 **Results:**
 
@@ -96,8 +96,19 @@ Also: `setup/env.sh`, `setup/lib.sh`, `setup/templates/`, `setup/sql/grants.sql`
 | 04 Time | **PASS** (2026-11-18), 4/4 checks: Etc/UTC, chrony running, clock synchronised |
 | 05 Firewall | **PASS** (2026-11-18), 8/8 checks: ufw active, deny incoming, 22, 443 and 8443 from 192.168.0.0/24 only, no other allow rules, enabled at boot. SSH session from 192.168.0.54 kept |
 | 06 MariaDB | **PASS** (2026-11-18), 38/38 checks, including 14 grant checks (each user can do its job and nothing more, MS-SEC-04). MariaDB 11.8.6-MariaDB-5ubuntu0.1. apt paused once more during the install (before the fix), resumed with `kill -CONT` |
-| 07 and 08 | not run yet |
+| 07 PKI | **PASS** (2026-11-18), 17/17 checks: key modes (MS-SEC-02), P-384 CAs and P-256 server keys, chains, the web CA's name constraint refuses `DNS:example.com` and `IP:10.0.0.1`. Agent CA and web CA valid to 2036-11-15; agent-api certificate to 2027-11-18, dashboard to 2027-12-20 |
+| 08 | not run yet |
 | Schema gate | **PASS** (2026-11-18): `db/migrations` applied cleanly. Schema approved (M-017) |
+
+## Public fingerprints (from 07-pki.sh, 2026-11-18; not secret)
+
+Also on the VM in `/etc/aio-mothership/pki/public/fingerprints.txt`. If 07 ever prints different values, the CA was replaced and every agent must be told.
+
+| CA | Value | Used for |
+| --- | --- | --- |
+| Agent CA SHA-256 | `A2:C8:F1:30:80:F7:86:0C:4B:67:48:14:B5:DD:A3:D3:C4:AD:AE:13:C9:BC:64:A7:01:9E:9C:52:9C:AD:00:4E` | Pinned by agents, MSI property (M-002) |
+| Web CA SHA-256 | `C1:C0:84:96:2F:A9:36:33:28:CD:61:C6:95:A6:9E:0F:0B:41:DE:BF:D3:E5:7C:0D:0C:DB:2B:F4:1A:4E:7E:89` | Checking the web CA |
+| Web CA SHA-1 thumbprint | `2333E0D2359F712DCAFDB34E2EA72AD03697F8FF` | What Windows shows on import |
 
 ## Must requirements still open
 
@@ -108,8 +119,8 @@ All of them: nothing is built and tested yet.
 
 ## Next steps
 
-1. **Steps 0 to 6 are done;** the schema gate passed.
-2. **Then 07 and 08,** one at a time, fixing anything the output shows.
+1. **Steps 0 to 7 are done;** the schema gate passed.
+2. **Then 08,** fixing anything the output shows.
 3. **After 08:** import the web CA on the PC, and check `https://192.168.0.191/health.php`. Milestone 1 is then done; report it and wait for the go-ahead for milestone 2.
 4. **Agent 5c can start now** from the approved contract (ingest-api.md §10), collector address 192.168.0.191.
 5. **For the tech lead:** the repo's `mothership-plan.md` and CLAUDE.md were updated (M-042); copy the changes to the master plan if it is kept elsewhere.
