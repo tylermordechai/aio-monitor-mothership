@@ -6,20 +6,18 @@ Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md
 
 ## Pick up here
 
+- **Milestone 1 is done** (2026-11-18). Waiting for the owner's go-ahead for milestone 2; nothing of milestone 2 is started.
 - **The ingest contract (v1) is approved** (M-017). Agent 5c can build against it; the collector address is 192.168.0.191.
-- **The VM is built** (2026-11-13): Ubuntu Server 26.04.1 LTS at 192.168.0.191, user `aioadmin`, clean snapshot `M0-off`.
-- **Server setup in progress:** `setup/01` to `08` and [setup.md](setup.md) (M-033 to M-039). 01 to 08 passed on the VM. The owner runs them over SSH one at a time and pastes the output back. Claude never logs in to the VM.
-- **Next:** import the web CA on the PC and open the dashboard health page; then the milestone 1 report.
-- **The schema is approved** (2026-11-18): `06-mariadb.sh` printed `SCHEMA GATE: PASS` on MariaDB 11.8.6 from Ubuntu (M-017). Milestone 1's gate (contract and schema approved) is met; 07 and 08 remain.
-- **MPD-32 to 34 answered** (M-039 to M-041): no automatic reboot, with "reboot required" shown by 03 and the dashboard health page; MS-OPS-04 reworded; an `aio_analyst` database user for command lines, details before milestone 5.
-- **The repo's plan copy and CLAUDE.md now match the decisions** (M-042), including the new MS-ING-12 (heartbeat, Must).
+- **The schema is approved** (2026-11-18): `06-mariadb.sh` printed `SCHEMA GATE: PASS` on MariaDB 11.8.6 from Ubuntu (M-017).
+- **The server is set up:** all of `setup/01` to `08` passed on the VM (Ubuntu Server 26.04.1 LTS, 192.168.0.191), run by the owner over SSH. The web CA is trusted on the owner's PC, and `https://192.168.0.191/health.php` loads.
+- **No decisions are open.** MPD-32 to 34 were answered as M-039 to M-041; the plan copy and CLAUDE.md match the decisions (M-042).
 
 ## Summary
 
 | Milestone | Scope | State |
 | --- | --- | --- |
-| 1 | Server and contract | **Contract approved** (2026-11-13, M-017). **Schema approved** (2026-11-18, schema gate passed). All 8 setup scripts passed on the VM; the web CA import on the PC remains |
-| 2 | Ingest, simulator, load test | Not started |
+| 1 | Server and contract | **Done** (2026-11-18). Contract approved (2026-11-13, M-017); schema approved (2026-11-18, schema gate passed); all 8 setup scripts passed on the VM; dashboard health page loads in the browser with the web CA |
+| 2 | Ingest, simulator, load test | Not started; waiting for the go-ahead |
 | 3 | Enrolment | Not started |
 | 4 | Retention (backups moved to "before ready to ship", M-026) | Not started |
 | 5 | Dashboard core | Not started |
@@ -110,20 +108,52 @@ Also on the VM in `/etc/aio-mothership/pki/public/fingerprints.txt`. If 07 ever 
 | Web CA SHA-256 | `C1:C0:84:96:2F:A9:36:33:28:CD:61:C6:95:A6:9E:0F:0B:41:DE:BF:D3:E5:7C:0D:0C:DB:2B:F4:1A:4E:7E:89` | Checking the web CA |
 | Web CA SHA-1 thumbprint | `2333E0D2359F712DCAFDB34E2EA72AD03697F8FF` | What Windows shows on import |
 
+## Milestone 1 report (2026-11-18)
+
+**What was built:**
+- **The contract and schema:** [ingest-api.md](ingest-api.md) (v1, approved) and `db/migrations/0001_initial.sql` (applied cleanly, approved).
+- **The server:** setup scripts `setup/01` to `08`, with templates and `grants.sql`, plus [setup.md](setup.md). Each script is idempotent and ends with PASS or FAIL checks.
+- **Two health pages,** which read no database and no secret.
+
+**How to run and test it:** follow [setup.md](setup.md) steps 0 to 8 on a fresh Ubuntu 26.04.1 VM. Each script's checks are the tests, and re-running a script re-runs its checks.
+
+**Results on the VM (2026-11-18):**
+
+| Step | Checks |
+| --- | --- |
+| 01 SSH key | 5/5 |
+| 02 SSH keys only | passed (tested from the PC) |
+| 03 OS updates | 8/8 |
+| 04 Time | 4/4 |
+| 05 Firewall | 8/8, plus 443 and 8443 reachable from the PC |
+| 06 MariaDB and schema gate | 38/38, `SCHEMA GATE: PASS` |
+| 07 PKI | 17/17 |
+| 08 Apache and PHP | 24/24 (on the re-run) |
+| Browser | `https://192.168.0.191/health.php` loads, showing `status ok`, TLS 1.3 and `reboot_required: false` |
+
+**Fixed during setup:**
+- **apt left stopped:** apt-get was paused (state `T`) under `sudo … | tee` in steps 03 and 06. All apt calls now go through `apt_get`, which gives apt no terminal. Step 08 then ran without a pause.
+- **Server header:** Ubuntu's `security.conf` overrode `ServerTokens Prod`. Step 08 now disables it.
+- **Lost logs:** `~/setup-logs` didn't exist, so `tee` saved nothing. The fix is `mkdir -p ~/setup-logs`, which is already in setup.md.
+
 ## Must requirements still open
 
-All of them: nothing is built and tested yet.
-- The contract and schema cover the design of MS-ING-01 to 06, 08, 09, 12 and MS-DAT-01, 02, 04, 05 (approved as design). MS-ING-11 (Should) and MS-ING-12 (Must, heartbeat) were added.
-- The setup scripts, once run, will cover MS-SEC-01 (TLS, firewall), MS-SEC-02 (CA key access, as far as files go), MS-SEC-04 (database users) and MS-SEC-12 (automatic updates).
-- MS-ING-10 and MS-DAT-06 are measured in milestone 2.
+- **Met by the setup, as far as milestone 1 goes:**
+  - MS-SEC-01: TLS on both ports, TLS 1.3 only on 8443, client certificates from the agent CA, the firewall;
+  - MS-SEC-02: the CA key's file access. Revocation comes with milestone 3;
+  - MS-SEC-04: three database users with tested table-level grants;
+  - MS-SEC-12: automatic security updates.
+- **Designed and approved but not built:** MS-ING-01 to 06, 08, 09 and 12, and MS-DAT-01, 02, 04 and 05.
+- **Measured in milestone 2:** MS-ING-10 and MS-DAT-06.
+- **Every other Must** (enrolment, retention, dashboard, alerts, operations) is open, in milestones 2 to 7.
+- **Only partly met:** MS-OPS-07 (rebuild from the repo). setup.md and the scripts cover the server; the app, timers and restore come later.
 
 ## Next steps
 
-1. **Steps 0 to 8 are done;** the schema gate passed.
-2. **The web CA import** on the PC (setup.md), then the health page in the browser.
-3. **After 08:** import the web CA on the PC, and check `https://192.168.0.191/health.php`. Milestone 1 is then done; report it and wait for the go-ahead for milestone 2.
-4. **Agent 5c can start now** from the approved contract (ingest-api.md §10), collector address 192.168.0.191.
-5. **For the tech lead:** the repo's `mothership-plan.md` and CLAUDE.md were updated (M-042); copy the changes to the master plan if it is kept elsewhere.
+1. **The owner's go-ahead for milestone 2** (ingest, simulator, load test). A plan comes first: files, approach and requirement IDs.
+2. **Before the milestone 2 gate:** resize the VM to the pilot size (4 vCPU, 16 GB, 250 GB), so the 500-host test measures the code.
+3. **Agent 5c can start now** from the approved contract (ingest-api.md §10), collector address 192.168.0.191. Agents pin the agent CA SHA-256 shown above.
+4. **For the tech lead:** copy the changes in the repo's `mothership-plan.md` and CLAUDE.md (M-042) to the master plan, if one is kept elsewhere.
 
 ## Before the pilot (M-031)
 
