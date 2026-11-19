@@ -46,6 +46,8 @@ final class Config
             'disk_path' => '/var/lib/mariadb',
             'disk_full_percent' => 90,
             'rows_per_insert' => 500,
+            // Log the phase timings of an ingest request that takes this long (0: off).
+            'slow_log_ms' => 0,
         ],
         'heartbeat' => [
             'interval_s' => 60,

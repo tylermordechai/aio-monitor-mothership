@@ -40,6 +40,8 @@ final class Writer
     /** Lines below max_seq_held that were stored (not duplicates): the rollback signal (§3.6). */
     public int $belowStored = 0;
     public int $belowAgentStartsStored = 0;
+    /** Time spent in row statements (prepare, execute, warning check), for IngestService::$timings. */
+    public float $dbSeconds = 0.0;
 
     public function __construct(
         private readonly PDO $pdo,
@@ -56,7 +58,9 @@ final class Writer
     {
         $below = $r->line->seq < $this->maxSeqHeld;
         if ($r->kind === 'executable' || $r->kind === 'gap') {
+            $t = microtime(true);
             $changed = $r->kind === 'executable' ? $this->upsertExecutable($r->row) : $this->upsertGap($r->row);
+            $this->dbSeconds += microtime(true) - $t;
             $changed ? $this->stored++ : $this->duplicates++;
             if ($changed && $below) {
                 $this->belowStored++;
@@ -124,7 +128,9 @@ final class Writer
         }
         [$table, $group] = explode('|', $key, 2);
         $rows = array_column($items, 'row');
+        $t = microtime(true);
         $inserted = $this->insertIgnore($table, $rows);
+        $this->dbSeconds += microtime(true) - $t;
         $n = count($rows);
         if ($table === 'quarantine') {
             // A quarantined line sent again the same day is kept once (§3.5);

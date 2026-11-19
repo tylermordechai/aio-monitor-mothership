@@ -22,6 +22,16 @@ use PDO;
  */
 final class IngestService
 {
+    /**
+     * Where the time of the last request went, in ms: read (body, inflate,
+     * split), setup (retention, lock, batch row), lines (validate and build,
+     * without the database), db (the row statements), finish (agent and host
+     * updates), commit. For the slow-request log and tools/bench-ingest.php.
+     *
+     * @var array<string, float>
+     */
+    public array $timings = [];
+
     public function __construct(
         private readonly PDO $pdo,
         private readonly Config $config,
@@ -41,6 +51,7 @@ final class IngestService
         $body = $req->body($max);
         $reader = new BatchReader($this->config);
         $lines = $reader->read($body);
+        $tRead = microtime(true);
 
         $batchId = self::batchId($req->header('x-aio-batch-id'));
         $receivedAt = Time::nowDb($start);
@@ -73,6 +84,7 @@ final class IngestService
                 $this->config->int('ingest', 'quarantine_keep_bytes'),
             );
 
+            $tSetup = microtime(true);
             $minSeq = null;
             $ackedSeq = 0;
             $maxStoredSeq = 0;
@@ -102,6 +114,7 @@ final class IngestService
                 }
             }
             $writer->finish();
+            $tLines = microtime(true);
 
             $regression = $writer->belowAgentStartsStored > 0
                 || $writer->belowStored > $this->config->int('ingest', 'seq_regression_lines');
@@ -123,7 +136,24 @@ final class IngestService
                 $reader->rawBytes, count($lines), $writer->stored, $writer->duplicates, $writer->quarantined,
                 $minSeq, $ackedSeq === 0 ? null : $ackedSeq, $durationMs, $batchPk, $receivedAt,
             ]);
+            $tFinish = microtime(true);
             $this->pdo->commit();
+            $tCommit = microtime(true);
+            $ms = static fn (float $a, float $b): float => round(($b - $a) * 1000, 1);
+            $this->timings = [
+                'read' => $ms($start, $tRead),
+                'setup' => $ms($tRead, $tSetup),
+                'lines' => round($ms($tSetup, $tLines) - $writer->dbSeconds * 1000, 1),
+                'db' => round($writer->dbSeconds * 1000, 1),
+                'finish' => $ms($tLines, $tFinish),
+                'commit' => $ms($tFinish, $tCommit),
+                'total' => $ms($start, $tCommit),
+            ];
+            $slow = $this->config->int('ingest', 'slow_log_ms');
+            if ($slow > 0 && $this->timings['total'] >= $slow) {
+                // Counts and timings only, never content (MS-SEC-10).
+                error_log(sprintf('aio ingest slow: lines=%d %s', count($lines), http_build_query($this->timings, '', ' ')));
+            }
         } catch (AgentIdMismatch) {
             $this->pdo->rollBack();
             $this->recordRefusedBatch($agent, $receivedAt, $batchId, strlen($body), 403, 'agent_id_mismatch', $start);
