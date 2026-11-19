@@ -129,7 +129,7 @@ Also on the VM in `/etc/aio-mothership/pki/public/fingerprints.txt`. If 07 ever 
 | Simulated agents, simulator, 0-lost check, figures | `tools/dev-agents.php`, `tools/simulator/simulate.php`, `src/Sim/*`, `tools/reconcile.php`, `tools/measure.php` | MS-ING-10, MS-DAT-06, M-049 |
 | Tests | `tests/Unit` (66, pass on the PC), `tests/Integration` (12, need `aio_test` on the VM) | CLAUDE.md |
 
-**Tested so far:** unit tests and `php -l` on the PC with a portable PHP 8.5.13 (`C:\dev	ools\php`, not in the repo). Nothing has run against MariaDB or Apache yet.
+**Tested so far:** unit tests and `php -l` on the PC with a portable PHP 8.5.13 (`C:\dev\tools\php`, not in the repo). Nothing has run against MariaDB or Apache yet.
 
 **Found while building:**
 - **Rollback records could be dropped:** 0001 keyed `agent_lifecycle` and `inventory_link_index` on `(agent, seq)`, which would have treated a rolled-back `agent_start` as a resend. Fixed by migration 0002 (M-046).
