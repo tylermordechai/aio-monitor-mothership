@@ -194,7 +194,7 @@ final class SimAgent
             default:
                 $seq = $f->nextSeq();
                 $f->envelope('etw_status', [], $now); // burn the seq
-                $this->queue[] = ['line' => '{"schema_version":1,"seq":' . $seq . ',"broken', 'seq' => $seq, 'table' => 'quarantine', 'kind' => 'insert', 'ident' => '', 'expect' => 'quarantined'];
+                $this->queue[] = ['line' => '{"schema_version":1,"seq":' . $seq . ',"broken', 'seq' => $seq, 'table' => 'quarantine', 'kind' => 'insert', 'ident' => '', 'expect' => 'quarantined', 'unreadable' => true];
         }
     }
 
@@ -218,7 +218,10 @@ final class SimAgent
                 $problems[] = 'resend not all duplicates: ' . json_encode($resp);
             }
         } else {
-            $maxSeq = max(array_column($lines, 'seq'));
+            // A line that isn't JSON has no seq the server can read, so it can't count
+            // towards acked_seq (ingest-api.md §3.3: "the highest seq among this request's lines").
+            $readable = array_filter($lines, static fn (array $l): bool => empty($l['unreadable']));
+            $maxSeq = $readable === [] ? 0 : max(array_column($readable, 'seq'));
             if (($resp['acked_seq'] ?? null) !== $maxSeq) {
                 $problems[] = "acked_seq {$resp['acked_seq']} != highest sent $maxSeq";
             }

@@ -131,6 +131,12 @@ Also on the VM in `/etc/aio-mothership/pki/public/fingerprints.txt`. If 07 ever 
 
 **On the VM (2026-11-19):** 06 and 08 re-run, PASS (migration 0002, grants, credential modes, vhost route). 09: first run 16/17, one integration test wrong (it expected MariaDB's `JSON_VALUE` to return `'true'` for a JSON true; it returns `'1'`), fixed in the test. Re-run: **17/17 PASS**: API smoke checks (401, 403, 405, 404), 66 unit tests, 12 integration tests (3,612 assertions) on PHP 8.5.4 and MariaDB 11.8.
 
+
+**First simulator run (2026-11-19, 10 agents, 120 s, faults on):**
+- 139 requests (119 ingest, 20 heartbeats), all 200; 4,678 lines acknowledged; reconcile: **0 lost**, 0 extra, every table matching.
+- Ingest time: simulator (client) p50 76 ms, p95 360 ms, p99 508 ms; Apache p95 355 ms; PHP to COMMIT p50 14 ms, p95 258 ms. Under 500 ms, but high for 1 request per second; being looked into before scaling up.
+- 1 answer mismatch, a simulator bug: it counted the seq of a deliberately broken (non-JSON) line towards the expected `acked_seq`, which the server can't read. Fixed in `SimAgent`.
+
 **Before the VM:** unit tests and `php -l` on the PC with a portable PHP 8.5.13 (`C:\dev\tools\php`, not in the repo). Nothing has run against MariaDB or Apache yet.
 
 **Found while building:**
