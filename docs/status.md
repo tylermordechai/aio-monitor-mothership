@@ -2,12 +2,12 @@
 
 Last updated: 2026-11-18
 
-Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md); decisions are in [decisions.md](decisions.md) (M-001 to M-044); open items are in [pending-decisions.md](pending-decisions.md) (none open); working rules are in [../CLAUDE.md](../CLAUDE.md).
+Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md); decisions are in [decisions.md](decisions.md) (M-001 to M-049); open items are in [pending-decisions.md](pending-decisions.md) (MPD-35); working rules are in [../CLAUDE.md](../CLAUDE.md).
 
 ## Pick up here
 
 - **Milestone 1 is signed off** (2026-11-19) by the owner. Snapshot `M1-done` taken with the VM shut down.
-- **Milestone 2: building** (OK given 2026-11-19). Gate kept at 500 simulated hosts, simulator on the mothership, heartbeat included, PHPUnit dev only (M-043, M-044). The VM resize to 4 vCPU, 16 GB, 250 GB is asked for, with steps, before the load-test gate.
+- **Milestone 2: built, not yet run on the VM** (2026-11-19). Gate kept at 500 simulated hosts, simulator on the mothership, heartbeat included, PHPUnit dev only (M-043, M-044). Next: the owner re-runs 06 and 08 and runs the new 09; then small simulator runs; then the VM resize and the gate run. The VM resize to 4 vCPU, 16 GB, 250 GB is asked for, with steps, before the load-test gate.
 - **The ingest contract (v1) is approved** (M-017). Agent 5c can build against it; the collector address is 192.168.0.191.
 - **The schema is approved** (2026-11-18): `06-mariadb.sh` printed `SCHEMA GATE: PASS` on MariaDB 11.8.6 from Ubuntu (M-017).
 - **The server is set up:** all of `setup/01` to `08` passed on the VM (Ubuntu Server 26.04.1 LTS, 192.168.0.191), run by the owner over SSH. The web CA is trusted on the owner's PC (thumbprint matched), and `https://192.168.0.191/health.php` loads with no certificate warning. Snapshot `M1-done` taken.
@@ -18,7 +18,7 @@ Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md
 | Milestone | Scope | State |
 | --- | --- | --- |
 | 1 | Server and contract | **Signed off** (2026-11-19). Done 2026-11-18. Contract approved (2026-11-13, M-017); schema approved (2026-11-18, schema gate passed); all 8 setup scripts passed on the VM; dashboard health page loads in the browser with the web CA |
-| 2 | Ingest, simulator, load test | Building (from 2026-11-19), M-043 |
+| 2 | Ingest, simulator, load test | Built (2026-11-19): ingest, heartbeat, simulator, 66 unit and 12 integration tests. Not yet deployed on the VM |
 | 3 | Enrolment | Not started |
 | 4 | Retention (backups moved to "before ready to ship", M-026) | Not started |
 | 5 | Dashboard core | Not started |
@@ -108,6 +108,32 @@ Also on the VM in `/etc/aio-mothership/pki/public/fingerprints.txt`. If 07 ever 
 | Agent CA SHA-256 | `A2:C8:F1:30:80:F7:86:0C:4B:67:48:14:B5:DD:A3:D3:C4:AD:AE:13:C9:BC:64:A7:01:9E:9C:52:9C:AD:00:4E` | Pinned by agents, MSI property (M-002) |
 | Web CA SHA-256 | `C1:C0:84:96:2F:A9:36:33:28:CD:61:C6:95:A6:9E:0F:0B:41:DE:BF:D3:E5:7C:0D:0C:DB:2B:F4:1A:4E:7E:89` | Checking the web CA |
 | Web CA SHA-1 thumbprint | `2333E0D2359F712DCAFDB34E2EA72AD03697F8FF` | What Windows shows on import |
+
+## Milestone 2: ingest (built 2026-11-19, not yet run on the VM)
+
+**What was built** (decisions M-043 to M-049):
+
+| Part | Files | Requirements |
+| --- | --- | --- |
+| Agent API front controller, routing, §7 errors | `public/agent/index.php`, `src/Api/AgentApi.php`, `src/Http/*`, vhost `FallbackResource` | MS-ING-01, 09, M-048 |
+| Identity from the client certificate; check-in on every request | `src/Auth/ClientCertAuth.php` | MS-ING-02, 08, MS-SEC-02 |
+| gzip with limits (zip-bomb guard), line split | `src/Ingest/BatchReader.php` | MS-ING-01, 09 |
+| Envelope checks, rules 1 to 8 | `src/Ingest/LineValidator.php` | MS-ING-02, 05 |
+| Fields to columns, rule 9, `extra`, IP columns, item keys | `src/Ingest/RowBuilder.php`, `ItemKeys.php`, `RecordTypes.php`, generated `Schema/table_map.php` | MS-ING-05, M-010, M-012 |
+| One transaction, INSERT IGNORE with the warning check, upserts, quarantine, rollback check, ack after commit | `src/Ingest/Writer.php`, `IngestService.php` | MS-ING-03, 04, M-005, M-014, M-015 |
+| Back-pressure: slots, per-agent rate, disk | `src/Ingest/Throttle.php` | MS-ING-09, MS-OPS-08 |
+| Heartbeat | `src/Heartbeat/HeartbeatService.php` | MS-ING-12 |
+| Migration 0002: rollback-safe keys on two tables | `db/migrations/0002_lifecycle_link_index_keys.sql` | MS-ING-03, M-046 |
+| Grants and credential modes | `setup/sql/grants.sql`, `setup/06-mariadb.sh` | MS-SEC-04, M-045, M-047 |
+| App setup and API smoke test | `setup/09-app.sh`, `setup/templates/app.ini` | MS-OPS-07 |
+| Simulated agents, simulator, 0-lost check, figures | `tools/dev-agents.php`, `tools/simulator/simulate.php`, `src/Sim/*`, `tools/reconcile.php`, `tools/measure.php` | MS-ING-10, MS-DAT-06, M-049 |
+| Tests | `tests/Unit` (66, pass on the PC), `tests/Integration` (12, need `aio_test` on the VM) | CLAUDE.md |
+
+**Tested so far:** unit tests and `php -l` on the PC with a portable PHP 8.5.13 (`C:\dev	ools\php`, not in the repo). Nothing has run against MariaDB or Apache yet.
+
+**Found while building:**
+- **Rollback records could be dropped:** 0001 keyed `agent_lifecycle` and `inventory_link_index` on `(agent, seq)`, which would have treated a rolled-back `agent_start` as a resend. Fixed by migration 0002 (M-046).
+- **§3.4 rule order:** checking "unknown type" before "provisional" would make the provisional list useless. Provisional is checked first (M-045). The contract text is unchanged; the intent is the same.
 
 ## Milestone 1 report (2026-11-18)
 

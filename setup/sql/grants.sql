@@ -39,7 +39,9 @@ GRANT INSERT ON aio.inv_iis_app_pools      TO 'aio_ingest'@'localhost';
 GRANT INSERT ON aio.inv_sql_instances      TO 'aio_ingest'@'localhost';
 GRANT INSERT ON aio.inv_server_apps        TO 'aio_ingest'@'localhost';
 GRANT INSERT ON aio.quarantine             TO 'aio_ingest'@'localhost';
-GRANT INSERT ON aio.ingest_batches         TO 'aio_ingest'@'localhost';
+-- The batch row is written first and its counts filled in before COMMIT;
+-- UPDATE ... WHERE needs SELECT on the key columns (M-045).
+GRANT SELECT, INSERT, UPDATE ON aio.ingest_batches TO 'aio_ingest'@'localhost';
 GRANT INSERT ON aio.agent_heartbeats       TO 'aio_ingest'@'localhost';
 -- One row per item, updated in place (M-014, M-015).
 GRANT SELECT, INSERT, UPDATE ON aio.executables   TO 'aio_ingest'@'localhost';

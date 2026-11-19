@@ -22,8 +22,11 @@ sort($files);
 $tables = [];
 foreach ($files as $file) {
     $sql = (string) file_get_contents($file);
-    if (preg_match('/^\s*ALTER\s+TABLE/im', $sql)) {
-        fwrite(STDERR, basename($file) . ": ALTER TABLE found; teach gen-table-map.php about it first\n");
+    // Key-only ALTERs (DROP/ADD PRIMARY KEY, indexes) don't change columns;
+    // anything that touches a column needs this generator taught first.
+    if (preg_match('/^\s*ALTER\s+TABLE/im', stripComments($sql))
+        && preg_match('/\b(ADD\s+(COLUMN\s+)?`?\w+`?\s+(INT|BIGINT|SMALLINT|TINYINT|VARCHAR|CHAR|TEXT|JSON|DATETIME|DATE|BOOLEAN|ENUM|DOUBLE|BINARY|VARBINARY|BLOB|MEDIUMBLOB)\b|MODIFY|CHANGE|DROP\s+COLUMN|RENAME)/i', stripComments($sql))) {
+        fwrite(STDERR, basename($file) . ": ALTER TABLE changes columns; teach gen-table-map.php about it first\n");
         exit(1);
     }
     foreach (createStatements($sql) as [$name, $body]) {

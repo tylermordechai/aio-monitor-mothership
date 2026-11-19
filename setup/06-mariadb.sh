@@ -114,7 +114,9 @@ done
 
 # --- 6. Application users and grants (MS-SEC-04) ------------------------------
 install -d -m 0755 -o root -g root "$AIO_ETC"
-install -d -m 0700 -o root -g root "$CRED_DIR"
+# 0711: the PHP pools can reach their own file, but nobody can list the
+# directory (M-047).
+install -d -m 0711 -o root -g root "$CRED_DIR"
 for u in "${APP_USERS[@]}"; do
     file="$CRED_DIR/$u.cnf"
     user="aio_$u"
@@ -127,13 +129,18 @@ for u in "${APP_USERS[@]}"; do
     fi
     tmp=$(umask 077; mktemp "$CRED_DIR/.tmp.XXXXXX")
     {
-        echo "# Database credentials for $user (M-036). Root-only. Never copy into the repo."
+        echo "# Database credentials for $user (M-036, M-047). Never copy into the repo."
         echo "[client]"
         echo "user=$user"
         echo "password=$pw"
         echo "socket=$SOCKET"
     } > "$tmp"
     chmod 0600 "$tmp"; chown root:root "$tmp"
+    # The ingest and dashboard pools read their own file through their group
+    # once 08 has created their system users (M-047); maint stays root-only.
+    if [[ "$u" != maint ]] && getent group "aio-$u" >/dev/null; then
+        chgrp "aio-$u" "$tmp"; chmod 0640 "$tmp"
+    fi
     mv -f "$tmp" "$file"
     mariadb <<SQL
 CREATE USER IF NOT EXISTS '$user'@'localhost' IDENTIFIED BY '$pw';
@@ -156,7 +163,8 @@ local_only()   { ! ss -Hltn | awk '{print $4}' | grep -E ':3306$' | grep -Evq '^
 sql_is()       { [[ $(sql "$1") == "$2" ]]; }
 root_socket()  { sql "SHOW CREATE USER 'root'@'localhost'" | grep -q unix_socket; }
 mig_recorded() { local f v; for f in "$AIO_REPO"/db/migrations/[0-9][0-9][0-9][0-9]_*.sql; do v=$(basename "$f" .sql); sql_is "SELECT COUNT(*) FROM $DB.schema_migrations WHERE version='$v'" 1 || return 1; done; }
-creds_ok()     { local u; for u in "${APP_USERS[@]}"; do file_mode_is "$CRED_DIR/$u.cnf" 600 root root || return 1; done; }
+cred_mode_ok() { local u=$1; if [[ "$u" != maint ]] && getent group "aio-$u" >/dev/null; then file_mode_is "$CRED_DIR/$u.cnf" 640 root "aio-$u"; else file_mode_is "$CRED_DIR/$u.cnf" 600 root root; fi; }
+creds_ok()     { local u; for u in "${APP_USERS[@]}"; do cred_mode_ok "$u" || return 1; done; }
 
 echo
 info "Checks"
@@ -173,8 +181,8 @@ check "no anonymous users" sql_is "SELECT COUNT(*) FROM mysql.user WHERE User=''
 check "root only at localhost" sql_is "SELECT COUNT(*) FROM mysql.user WHERE User='root' AND Host<>'localhost'" 0
 check "root signs in by unix socket" root_socket
 check "no test database" sql_is "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name='test'" 0
-check "credential files are root-only (600 root root)" creds_ok
-check "credential directory is 700" file_mode_is "$CRED_DIR" 700 root root
+check "credential files: maint 600 root; ingest and dashboard 640 root:<their pool> (M-047)" creds_ok
+check "credential directory is 711 (no listing)" file_mode_is "$CRED_DIR" 711 root root
 
 echo
 info "Schema gate"

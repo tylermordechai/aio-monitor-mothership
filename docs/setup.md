@@ -1,6 +1,6 @@
 # Server setup
 
-How to build the mothership VM from this repo (MS-OPS-07). The decisions behind each step are M-033 to M-039 in [decisions.md](decisions.md).
+How to build the mothership VM from this repo (MS-OPS-07). The decisions behind each step are M-033 to M-039, and M-043 to M-049 for step 9 and the simulator in [decisions.md](decisions.md).
 
 - **The VM:** Ubuntu Server 26.04.1 LTS at **192.168.0.191** on Unraid (2 vCPU, 8 GB, 100 GB, bridged), user `aioadmin` with sudo. Clean snapshot: `M0-off`.
 - **The network:** the owner's PC and the test servers are on 192.168.0.0/24. Nothing else may reach the VM (M-025).
@@ -21,6 +21,7 @@ Every script says at the top what it does, whether it needs sudo and whether it 
 | 6 | `06-mariadb.sh` | yes | no | MariaDB 11.8 from Ubuntu, hardened; database `aio`; migrations (**the schema gate**); 3 app users (MS-SEC-04) |
 | 7 | `07-pki.sh` | yes | no | Agent CA, web CA (192.168.0.0/24 only), both server certificates (IP SAN) |
 | 8 | `08-apache-php.sh` | yes | no | Apache and PHP 8.5-FPM; vhosts 8443 (TLS 1.3, client cert optional) and 443; health pages |
+| 9 | `09-app.sh [--production]` | yes | no | Milestone 2: Composer packages, `app.ini`, the ingest state directory, the `aio_test` database; checks the agent API and runs the tests |
 
 **Snapshots:** take an Unraid snapshot after step 2 (`M1-ssh`), after step 6 (`M1-db`) and after step 8 (`M1-web`), with the VM shut down if you want them consistent. They're for rolling back during setup, not backups (M-026).
 
@@ -217,12 +218,49 @@ Get-ChildItem Cert:\CurrentUser\Root | Where-Object Subject -like '*AIO Monitor 
 
 Don't import the **agent CA** on the PC. Only agents use it, and they pin it themselves.
 
+## Step 9: the PHP application (`09-app.sh`, milestone 2)
+
+After a `git pull` that brings new migrations, grants or vhost changes, re-run the earlier scripts first. They are safe to re-run and change only what differs:
+
+```bash
+cd /opt/aio-mothership && git pull --ff-only
+sudo bash setup/06-mariadb.sh 2>&1 | tee ~/setup-logs/06.log     # new migrations, grants, credential file modes
+sudo bash setup/08-apache-php.sh 2>&1 | tee ~/setup-logs/08.log  # vhost changes
+sudo bash setup/09-app.sh 2>&1 | tee ~/setup-logs/09.log
+```
+
+- **09 installs** Composer and three PHP extensions (`xml`, `mbstring`, `curl`) from Ubuntu, then the Composer packages. On this dev VM that includes PHPUnit (M-044); `--production` leaves it out.
+- **`/etc/aio-mothership/app.ini`** is written once and never overwritten, so edits stay.
+- **Its checks** call the agent API with no certificate (401), with an unregistered certificate (403), with the wrong method (405) and on an unknown path (404). Then they run the unit and integration tests. The integration tests rebuild the `aio_test` database from the migrations each time; they never touch `aio`.
+
+## Milestone 2: the simulator
+
+All on the VM, as `aioadmin` with sudo (the tools read the test keys and `maint.cnf`).
+
+```bash
+cd /opt/aio-mothership
+sudo php tools/dev-agents.php create 10                      # 10 simulated hosts, SIM-0001..
+sudo php tools/simulator/simulate.php --agents=10 --duration=120 --faults
+sudo php tools/reconcile.php                                 # RESULT: 0 LOST
+sudo php tools/measure.php latency                           # server-side times for the last run
+sudo php tools/measure.php size                              # MB per host per day (MS-DAT-06)
+sudo php tools/dev-agents.php delete                         # removes every simulator row and file
+```
+
+- **Simulated agents** are in host group `simulator`, with certificates from the agent CA (M-049). `delete` removes only them.
+- **`--day`** makes 24 hours of records per agent with past timestamps and sends them as fast as the server takes them. Use it with a few agents (`--agents=20 --day`) for the size figure.
+- **The gate run** (after the VM resize): `--agents=500 --duration=3600 --faults`. The simulator prints progress every 10 s and a summary at the end, written to `/var/lib/aio-mothership/sim/runs/<time>/summary.json`.
+
 ## What ends up where on the VM
 
 | Path | What | Who can read it |
 | --- | --- | --- |
 | `/opt/aio-mothership` | This repo (read-only clone) | everyone |
-| `/etc/aio-mothership/db/{ingest,dashboard,maint}.cnf` | Database credentials | root only (600). Milestone 2 gives each PHP pool's group read access to its own file |
+| `/etc/aio-mothership/db/{ingest,dashboard,maint}.cnf` | Database credentials | `maint`: root only (600). `ingest`, `dashboard`: root and that PHP pool's group (640, M-047). The directory is 711 |
+| `/etc/aio-mothership/db/test.cnf` | `aio_test` credentials (integration tests, no real data) | root and `aioadmin` (640) |
+| `/etc/aio-mothership/app.ini` | App settings (limits, back-pressure), no secrets | everyone |
+| `/run/aio-ingest/` | Ingest slot and rate lock files (tmpfs) | `aio-ingest` (700) |
+| `/var/lib/aio-mothership/sim/` | Simulated agents' keys, state and run summaries (test only) | root (700) |
 | `/etc/aio-mothership/pki/agent-ca/ca.key` | Agent CA key | root and group `aio-signer` (440) |
 | `/etc/aio-mothership/pki/web-ca/ca.key` | Web CA key | root only (400) |
 | `/etc/aio-mothership/pki/server/*.key` | Server keys for 8443 and 443 | root only (400); Apache reads them at start |

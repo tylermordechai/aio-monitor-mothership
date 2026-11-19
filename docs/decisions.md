@@ -378,3 +378,38 @@ Proposed in [ingest-api.md](ingest-api.md) and `db/migrations/0001_initial.sql`,
 **Requirements:** CLAUDE.md (Build and test) · **Status:** Accepted 2026-11-19 (owner)
 - PHPUnit through Composer as a `require-dev` dependency. BSD-3-Clause, maintained by its author, with releases for PHP 8.5.
 - Composer comes from Ubuntu's own package (M-029). Production code has no Composer dependencies; it uses only PHP's built-in PDO, zlib and JSON. `composer install --no-dev` on the server is enough to run the app.
+
+### M-045 Ingest implementation choices
+**Requirements:** MS-ING-01 to 05, 08, 09 · **Status:** Accepted 2026-11-19 (built in milestone 2; contract unchanged)
+- **Provisional before unknown.** A record type on the provisional list is quarantined as `provisional type, no table yet` even though it isn't a known type. §3.4 lists "unknown" (rule 6) first, which would make the list useless for the new types it exists for.
+- **The batch row comes first.** `ingest_batches` is inserted at the start of the transaction (the rows need its id) and its counts filled in before COMMIT. `aio_ingest` gets `SELECT, UPDATE` on `ingest_batches` (an `UPDATE … WHERE` needs SELECT on the key columns). It still can't read any record table.
+- **Counting:** a resent line that was quarantined before counts as `quarantined` (it is held). `acked_seq` is the highest `seq` of all the request's lines, quarantined ones included; `max_seq_held` counts stored lines only, so a quarantined line with a wild `seq` can't upset the rollback check.
+- **The rollback check** (§3.6) runs per request: a stored, non-duplicate `agent_start` below `max_seq_held`, or more than 1,000 such lines.
+- **Certificates:** `valid` and `superseded` certificates are accepted (a renewing agent may still use the old one briefly); `revoked`, or a revoked agent, gets 403 and sets `last_refused_at`. The certificate's CN must equal the registered agent ID.
+- **Times in `data`** may carry an offset and are converted to UTC; the envelope `ts` must end in `Z` (rule 4). Go's zero time is stored as NULL.
+- **The column map** is generated from the migrations (`tools/gen-table-map.php` → `src/Ingest/Schema/table_map.php`); an integration test compares it with `information_schema`.
+- **Back-pressure** (§8.2) uses lock files in `/run/aio-ingest`: 12 concurrent ingest slots, and 5 requests per second per agent over 10 s. Both are settings in `app.ini`.
+
+### M-046 Migration 0002: agent_lifecycle and inventory_link_index keyed on (agent, seq, ts)
+**Requirements:** MS-ING-03, MS-DAT-01 · **Status:** Accepted 2026-11-19
+- 0001 keyed these two unpartitioned tables on `(agent_pk, seq)`. After a state rollback the new `agent_start` reuses an old `seq` and would have been dropped as a resend, though it is the record the rollback check looks for (M-005).
+- 0002 changes both primary keys to `(agent_pk, seq, ts)`, like every other record table. 0001 is unchanged (it is approved and applied).
+
+### M-047 Database credential files readable by their own pool
+**Requirements:** MS-SEC-04, MS-SEC-10 · **Status:** Accepted 2026-11-19
+- `/etc/aio-mothership/db/` is `711 root`: a pool can open its own file, nobody can list the directory.
+- `ingest.cnf` is `640 root:aio-ingest` and `dashboard.cnf` `640 root:aio-dashboard` once 08 has created those users; `maint.cnf` stays `600 root`. 06 sets this and checks it; 09 checks the ingest pool can read its own file and not `maint.cnf`.
+
+### M-048 Agent API routing
+**Requirements:** MS-ING-01, MS-ING-09 · **Status:** Accepted 2026-11-19
+- `FallbackResource /index.php` in the 8443 vhost sends every path that isn't a file to `public/agent/index.php`. No `mod_rewrite`.
+- Milestone 2 answers `/api/v1/ingest` and `/api/v1/heartbeat`. Every other path, including enrol, config and renew until milestone 3, gets 404 `not_found` in the §7 shape.
+- A missing client certificate is refused (401) before the database is touched.
+
+### M-049 Simulated agents and the simulator
+**Requirements:** CLAUDE.md "Build and test", MS-ING-10, MS-DAT-06 · **Status:** Accepted 2026-11-19; the volume profile is *(confirm, MPD-35)*
+- **Identities:** `tools/dev-agents.php` (root) issues client certificates straight from the agent CA with the §2.3 profile and registers them as enrolment will. All simulated hosts are in host group `simulator`; `delete` removes exactly those rows and files.
+- **Behaviour:** the simulator follows §8.1: one request in flight per agent, lines deleted only on a 200, full-jitter backoff with `Retry-After` as a floor, 413 split. With `--faults` it resends acknowledged batches and adds malformed, unknown-type and missing-field lines, and checks every answer's counts.
+- **0 lost:** each simulated agent keeps, across runs, the rows it expects from acknowledged lines (executables and gaps by their natural key). `tools/reconcile.php` compares that with the database per agent and table.
+- **Figures:** `tools/measure.php latency` (from `ingest_batches` and Apache's `%D`), `tools/measure.php size` (MB per host per day from table sizes). The simulator reports client-side p95, which is the gate figure: it is the strictest.
+- **Volume per host** is `Aio\Sim\Profile`: 20 flows per 10 s, a snapshot every 5 minutes (40 connections, 12 listeners, 6 UDP), 2 process start/stop pairs a minute, ETW status every minute, a new executable every 5 minutes, a full inventory (60 apps, 120 services) at start and daily. These are estimates.
