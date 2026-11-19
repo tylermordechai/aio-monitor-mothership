@@ -363,3 +363,18 @@ Proposed in [ingest-api.md](ingest-api.md) and `db/migrations/0001_initial.sql`,
   - the platform, fixed IP, no DNS, two CAs and firewall (M-024, M-025, M-029);
   - MS-OPS-04 (M-040) and the milestone 4 gate (M-031).
 - The heartbeat already had its own endpoint in the contract (M-006); MS-ING-12 gives it a requirement ID. ingest-api.md now cites it. The contract itself is unchanged.
+
+## Milestone 2: ingest (2026-11-19)
+
+### M-043 Milestone 2 scope and gate
+**Requirements:** MS-ING-01 to 05, 08 to 10, 12, MS-DAT-06 · **Status:** Accepted 2026-11-19 (owner)
+- **The gate stays as planned:** 500 simulated hosts, a batch every 10 s and a heartbeat every 60 s each, for 1 hour; p95 under 500 ms and 0 lines lost; MB per host per day reported.
+- **The simulator runs on the mothership VM itself,** not on a second VM. It shares the CPU, so the timings it reports are pessimistic. If the gate misses by a little, the simulator's own CPU use is reported next to it.
+- **The owner's dev-machine agent is the first real-agent test,** once agent 5c and mothership milestone 3 (enrolment) are done; more hosts are added in the pilot.
+- **The heartbeat (MS-ING-12) is built in milestone 2,** so the load test carries real heartbeat traffic. `GET /api/v1/config` (MS-ING-07, Should) moves to milestone 3, with enrolment.
+- **The VM is resized** to 4 vCPU, 16 GB and 250 GB just before the gate run; the owner gets step-by-step instructions then.
+
+### M-044 PHPUnit, dev only
+**Requirements:** CLAUDE.md (Build and test) · **Status:** Accepted 2026-11-19 (owner)
+- PHPUnit through Composer as a `require-dev` dependency. BSD-3-Clause, maintained by its author, with releases for PHP 8.5.
+- Composer comes from Ubuntu's own package (M-029). Production code has no Composer dependencies; it uses only PHP's built-in PDO, zlib and JSON. `composer install --no-dev` on the server is enough to run the app.

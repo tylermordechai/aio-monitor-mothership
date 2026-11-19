@@ -2,12 +2,12 @@
 
 Last updated: 2026-11-18
 
-Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md); decisions are in [decisions.md](decisions.md) (M-001 to M-042); open items are in [pending-decisions.md](pending-decisions.md) (none open); working rules are in [../CLAUDE.md](../CLAUDE.md).
+Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md); decisions are in [decisions.md](decisions.md) (M-001 to M-044); open items are in [pending-decisions.md](pending-decisions.md) (none open); working rules are in [../CLAUDE.md](../CLAUDE.md).
 
 ## Pick up here
 
 - **Milestone 1 is signed off** (2026-11-19) by the owner. Snapshot `M1-done` taken with the VM shut down.
-- **Milestone 2: go given (2026-11-19), plan first.** The plan was sent; building waits for the owner's OK and three answers (PHPUnit via Composer, where the simulator runs for the gate, heartbeat in milestone 2). The VM resize to 4 vCPU, 16 GB, 250 GB is asked for, with steps, before the load-test gate.
+- **Milestone 2: building** (OK given 2026-11-19). Gate kept at 500 simulated hosts, simulator on the mothership, heartbeat included, PHPUnit dev only (M-043, M-044). The VM resize to 4 vCPU, 16 GB, 250 GB is asked for, with steps, before the load-test gate.
 - **The ingest contract (v1) is approved** (M-017). Agent 5c can build against it; the collector address is 192.168.0.191.
 - **The schema is approved** (2026-11-18): `06-mariadb.sh` printed `SCHEMA GATE: PASS` on MariaDB 11.8.6 from Ubuntu (M-017).
 - **The server is set up:** all of `setup/01` to `08` passed on the VM (Ubuntu Server 26.04.1 LTS, 192.168.0.191), run by the owner over SSH. The web CA is trusted on the owner's PC (thumbprint matched), and `https://192.168.0.191/health.php` loads with no certificate warning. Snapshot `M1-done` taken.
@@ -18,7 +18,7 @@ Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md
 | Milestone | Scope | State |
 | --- | --- | --- |
 | 1 | Server and contract | **Signed off** (2026-11-19). Done 2026-11-18. Contract approved (2026-11-13, M-017); schema approved (2026-11-18, schema gate passed); all 8 setup scripts passed on the VM; dashboard health page loads in the browser with the web CA |
-| 2 | Ingest, simulator, load test | Plan sent (2026-11-19); waiting for the OK to build |
+| 2 | Ingest, simulator, load test | Building (from 2026-11-19), M-043 |
 | 3 | Enrolment | Not started |
 | 4 | Retention (backups moved to "before ready to ship", M-026) | Not started |
 | 5 | Dashboard core | Not started |
