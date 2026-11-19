@@ -121,7 +121,7 @@ if [[ $PRODUCTION -eq 0 ]]; then
     unit_tests 2>&1 | tail -n 4
     check "unit tests pass" unit_tests
     echo; info "Integration tests (database aio_test)"
-    integration_tests 2>&1 | tail -n 12
+    integration_tests 2>&1 | tail -n 80
     check "integration tests pass" integration_tests
 fi
 finish

@@ -231,10 +231,11 @@ final class IngestTest extends TestCase
         self::assertSame(200, $r->status);
         self::assertSame(60, $r->body['heartbeat_s']);
         self::assertSame('"cfg-1-1"', $r->body['config_etag']);
-        $hb = $this->pdo->query('SELECT queue_records, last_acked_seq, JSON_VALUE(body, \'$.something_new\') AS kept FROM agent_heartbeats WHERE agent_pk = ' . $this->a['agent_pk'])->fetch();
+        $hb = $this->pdo->query('SELECT queue_records, last_acked_seq, body FROM agent_heartbeats WHERE agent_pk = ' . $this->a['agent_pk'])->fetch();
         self::assertSame(120, (int) $hb['queue_records']);
         self::assertSame(77, (int) $hb['last_acked_seq']);
-        self::assertSame('true', $hb['kept'], 'unknown fields kept');
+        // MariaDB's JSON_VALUE turns true into '1', so check the stored JSON itself.
+        self::assertTrue(json_decode((string) $hb['body'], true)['something_new'] ?? null, 'unknown fields kept');
         $ag = $this->pdo->query('SELECT queue_records, clock_skew_ms, last_version FROM agents WHERE id = ' . $this->a['agent_pk'])->fetch();
         self::assertSame(120, (int) $ag['queue_records']);
         self::assertGreaterThan(1000, (int) $ag['clock_skew_ms']);
