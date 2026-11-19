@@ -7,7 +7,7 @@ Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md
 ## Pick up here
 
 - **Milestone 1 is signed off** (2026-11-19) by the owner. Snapshot `M1-done` taken with the VM shut down.
-- **Milestone 2: built, not yet run on the VM** (2026-11-19). Gate kept at 500 simulated hosts, simulator on the mothership, heartbeat included, PHPUnit dev only (M-043, M-044). Next: the owner re-runs 06 and 08 and runs the new 09; then small simulator runs; then the VM resize and the gate run. The VM resize to 4 vCPU, 16 GB, 250 GB is asked for, with steps, before the load-test gate.
+- **Milestone 2: deployed on the VM** (2026-11-19); 09 passes, unit and integration tests pass on MariaDB. Gate kept at 500 simulated hosts, simulator on the mothership, heartbeat included, PHPUnit dev only (M-043, M-044). Next: small simulator runs (10 agents), then the VM resize and the 500-agent gate run. The VM resize to 4 vCPU, 16 GB, 250 GB is asked for, with steps, before the load-test gate.
 - **The ingest contract (v1) is approved** (M-017). Agent 5c can build against it; the collector address is 192.168.0.191.
 - **The schema is approved** (2026-11-18): `06-mariadb.sh` printed `SCHEMA GATE: PASS` on MariaDB 11.8.6 from Ubuntu (M-017).
 - **The server is set up:** all of `setup/01` to `08` passed on the VM (Ubuntu Server 26.04.1 LTS, 192.168.0.191), run by the owner over SSH. The web CA is trusted on the owner's PC (thumbprint matched), and `https://192.168.0.191/health.php` loads with no certificate warning. Snapshot `M1-done` taken.
@@ -18,7 +18,7 @@ Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md
 | Milestone | Scope | State |
 | --- | --- | --- |
 | 1 | Server and contract | **Signed off** (2026-11-19). Done 2026-11-18. Contract approved (2026-11-13, M-017); schema approved (2026-11-18, schema gate passed); all 8 setup scripts passed on the VM; dashboard health page loads in the browser with the web CA |
-| 2 | Ingest, simulator, load test | Built (2026-11-19): ingest, heartbeat, simulator, 66 unit and 12 integration tests. Not yet deployed on the VM |
+| 2 | Ingest, simulator, load test | Deployed (2026-11-19): 06, 08 and 09 pass; 66 unit and 12 integration tests pass on the VM. Simulator runs next |
 | 3 | Enrolment | Not started |
 | 4 | Retention (backups moved to "before ready to ship", M-026) | Not started |
 | 5 | Dashboard core | Not started |
@@ -109,7 +109,7 @@ Also on the VM in `/etc/aio-mothership/pki/public/fingerprints.txt`. If 07 ever 
 | Web CA SHA-256 | `C1:C0:84:96:2F:A9:36:33:28:CD:61:C6:95:A6:9E:0F:0B:41:DE:BF:D3:E5:7C:0D:0C:DB:2B:F4:1A:4E:7E:89` | Checking the web CA |
 | Web CA SHA-1 thumbprint | `2333E0D2359F712DCAFDB34E2EA72AD03697F8FF` | What Windows shows on import |
 
-## Milestone 2: ingest (built 2026-11-19, not yet run on the VM)
+## Milestone 2: ingest (built and deployed 2026-11-19)
 
 **What was built** (decisions M-043 to M-049):
 
@@ -129,7 +129,9 @@ Also on the VM in `/etc/aio-mothership/pki/public/fingerprints.txt`. If 07 ever 
 | Simulated agents, simulator, 0-lost check, figures | `tools/dev-agents.php`, `tools/simulator/simulate.php`, `src/Sim/*`, `tools/reconcile.php`, `tools/measure.php` | MS-ING-10, MS-DAT-06, M-049 |
 | Tests | `tests/Unit` (66, pass on the PC), `tests/Integration` (12, need `aio_test` on the VM) | CLAUDE.md |
 
-**Tested so far:** unit tests and `php -l` on the PC with a portable PHP 8.5.13 (`C:\dev\tools\php`, not in the repo). Nothing has run against MariaDB or Apache yet.
+**On the VM (2026-11-19):** 06 and 08 re-run, PASS (migration 0002, grants, credential modes, vhost route). 09: first run 16/17, one integration test wrong (it expected MariaDB's `JSON_VALUE` to return `'true'` for a JSON true; it returns `'1'`), fixed in the test. Re-run: **17/17 PASS**: API smoke checks (401, 403, 405, 404), 66 unit tests, 12 integration tests (3,612 assertions) on PHP 8.5.4 and MariaDB 11.8.
+
+**Before the VM:** unit tests and `php -l` on the PC with a portable PHP 8.5.13 (`C:\dev\tools\php`, not in the repo). Nothing has run against MariaDB or Apache yet.
 
 **Found while building:**
 - **Rollback records could be dropped:** 0001 keyed `agent_lifecycle` and `inventory_link_index` on `(agent, seq)`, which would have treated a rolled-back `agent_start` as a resend. Fixed by migration 0002 (M-046).
