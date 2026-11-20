@@ -167,6 +167,8 @@ Server: `innodb_flush_log_at_trx_commit = 1`, buffer pool 3,072 MB, binlog off.
 
 - The `domains` share: primary storage **Array**, no secondary storage, no mover action. The VM disk sits on the parity-protected hard-drive array, not on the SSD cache pool the platform assumes (CLAUDE.md, Platform). Each sync waits for a data-disk write plus a parity write.
 
+- Unraid host: no SSD and no pool. Ten 1.2 TB 10k SAS hard drives (HGST HUC101812CSS205), seven of them array data drives; the VM files are on `disk1`. Open decision: MPD-36.
+
 **Finding:** the slow ingest commits come from the disk under the VM, not from the CPU or the code. The cause is on the Unraid side (where the vDisk is stored and its format); it'll be checked and fixed during the resize, before the gate.
 
 **Before the VM:** unit tests and `php -l` on the PC with a portable PHP 8.5.13 (`C:\dev\tools\php`, not in the repo). Nothing has run against MariaDB or Apache yet.
