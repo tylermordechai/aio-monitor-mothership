@@ -56,7 +56,7 @@ Start the pilot VM at 4 vCPU, 16 GB RAM and a 250 GB disk on Unraid's SSD cache 
 | --- | --- | --- | --- |
 | vCPU | 4 | 8 | PHP ingest workers and nightly jobs |
 | RAM | 16 GB | 32 GB | Most goes to MariaDB's buffer pool (about 60% of RAM) |
-| Database disk | 250 GB | 1.5 TB | Estimate: about 25 MB per host per day of detail × 90 days, plus summaries and indexes *(replace with measured figure in milestone 2)* |
+| Database disk | 250 GB | 1.5 TB | Measured in milestone 2: 111 MB per host per day on the simulator (servers 120, laptops 102), × 90 days; the sizes in this row predate it and are re-sized with MPD-37 |
 | Backup space | 2× database size | 2× database size | On an Unraid array share, outside the VM |
 
 **Development VM (M-050):** 2 vCPU, 8 GB RAM and a 100 GB disk on the Unraid array (the server has hard drives only, no SSD), kept as it is through development and the pilot. The sizes in the table are for production hardware, specified before production with the backup work (M-026); MS-ING-10 and MS-UI-08 at 500 hosts are verified there.

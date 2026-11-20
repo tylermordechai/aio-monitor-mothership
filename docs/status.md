@@ -1,24 +1,24 @@
 # Project status
 
-Last updated: 2026-11-18
+Last updated: 2026-11-20
 
-Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md); decisions are in [decisions.md](decisions.md) (M-001 to M-049); open items are in [pending-decisions.md](pending-decisions.md) (MPD-35); working rules are in [../CLAUDE.md](../CLAUDE.md).
+Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md); decisions are in [decisions.md](decisions.md) (M-001 to M-050); open items are in [pending-decisions.md](pending-decisions.md) (MPD-35, MPD-37); working rules are in [../CLAUDE.md](../CLAUDE.md).
 
 ## Pick up here
 
 - **Milestone 1 is signed off** (2026-11-19) by the owner. Snapshot `M1-done` taken with the VM shut down.
-- **Milestone 2: deployed on the VM** (2026-11-19); 09 passes, unit and integration tests pass on MariaDB. Gate kept at 500 simulated hosts, simulator on the mothership, heartbeat included, PHPUnit dev only (M-043, M-044). Next: small simulator runs (10 agents), then the VM resize and the 500-agent gate run. The VM resize to 4 vCPU, 16 GB, 250 GB is asked for, with steps, before the load-test gate.
+- **Milestone 2: gate passed** (2026-11-20), waiting for the owner's sign-off. 2 simulated servers and 2 laptops (M-050): p95 133 ms, 0 lost, 111.3 MB per host per day. No VM resize; the hardware stays as it is (M-050).
 - **The ingest contract (v1) is approved** (M-017). Agent 5c can build against it; the collector address is 192.168.0.191.
 - **The schema is approved** (2026-11-18): `06-mariadb.sh` printed `SCHEMA GATE: PASS` on MariaDB 11.8.6 from Ubuntu (M-017).
 - **The server is set up:** all of `setup/01` to `08` passed on the VM (Ubuntu Server 26.04.1 LTS, 192.168.0.191), run by the owner over SSH. The web CA is trusted on the owner's PC (thumbprint matched), and `https://192.168.0.191/health.php` loads with no certificate warning. Snapshot `M1-done` taken.
-- **No decisions are open.** MPD-32 to 34 were answered as M-039 to M-041; the plan copy and CLAUDE.md match the decisions (M-042).
+- **Open decisions:** MPD-35 (simulator volume) and MPD-37 (disk and retention for 111 MB per host per day).
 
 ## Summary
 
 | Milestone | Scope | State |
 | --- | --- | --- |
 | 1 | Server and contract | **Signed off** (2026-11-19). Done 2026-11-18. Contract approved (2026-11-13, M-017); schema approved (2026-11-18, schema gate passed); all 8 setup scripts passed on the VM; dashboard health page loads in the browser with the web CA |
-| 2 | Ingest, simulator, load test | Deployed (2026-11-19): 06, 08 and 09 pass; 66 unit and 12 integration tests pass on the VM. Simulator runs next |
+| 2 | Ingest, simulator, load test | **Gate passed** (2026-11-20, M-050): p95 133 ms, 0 lost, 111.3 MB per host per day. Waiting for sign-off |
 | 3 | Enrolment | Not started |
 | 4 | Retention (backups moved to "before ready to ship", M-026) | Not started |
 | 5 | Dashboard core | Not started |
@@ -151,7 +151,10 @@ Also on the VM in `/etc/aio-mothership/pki/public/fingerprints.txt`. If 07 ever 
 - 638 requests, all 200; **738,520 lines** (about 185,000 per host per day) in about 2 minutes, 6,192 lines per s; 16 MB compressed sent; 0 unsent; 0 mismatches.
 - Ingest p50 538 ms, p95 1,056 ms, max 2,012 ms. These are catch-up batches of about 1,160 lines each, like an agent emptying its buffer after an outage, not the 10 s batches the gate measures. 6,192 lines per s is about 140 times the 4 hosts' live rate.
 - Reconcile: **0 LOST**, 0 extra rows, 4 agents.
-- Size: pending.
+- Size (`measure.php size`, 1.00 day, 4 hosts): **111.3 MB per host per day** in total; **servers 120.0, laptops 101.8** (table sizes shared out by rows).
+  - `net_flows` is 85 % of it: 95.0 MB per host per day, 592,941 rows (about 148,000 per host per day, about 670 bytes per row with indexes).
+  - Then `process_events` 6.3, `snap_tcp_conns` 5.4, `snap_listeners` 1.1, `snap_udp_endpoints` 0.9, `process_command_lines` 0.6, `executables` 0.6, `agent_status` 0.5 (MB per host per day).
+  - The plan's estimate was 25 MB per host per day; this is 4.5 times that, on the simulator's estimated volume (MPD-35). See MPD-37.
 
 **Ingest benchmark (2026-11-19, `tools/bench-ingest.php 10`, no HTTP, `aio_test`):**
 
@@ -194,6 +197,30 @@ Server: `innodb_flush_log_at_trx_commit = 1`, buffer pool 3,072 MB, binlog off.
 - **Rollback records could be dropped:** 0001 keyed `agent_lifecycle` and `inventory_link_index` on `(agent, seq)`, which would have treated a rolled-back `agent_start` as a resend. Fixed by migration 0002 (M-046).
 - **§3.4 rule order:** checking "unknown type" before "provisional" would make the provisional list useless. Provisional is checked first (M-045). The contract text is unchanged; the intent is the same.
 
+## Milestone 2 report (2026-11-20)
+
+**What was built:** the agent ingest API on 8443 (mTLS identity, validation, dedup, quarantine, one transaction per batch, acknowledgement after commit, back-pressure, heartbeat), migration 0002, the app setup script 09, and the simulator with reconcile, measure, bench and fsync tools. Table above; decisions M-043 to M-050.
+
+**How to run and test it:** `docs/setup.md`, "Milestone 2: the simulator". Unit tests: `php vendor/bin/phpunit --testsuite unit` (67, also on the PC); integration tests run in `setup/09-app.sh` on the VM (12, against `aio_test`).
+
+**Results:**
+
+| Gate (M-050) | Needed | Result |
+| --- | --- | --- |
+| Hosts | 2 simulated servers, 2 simulated laptops | 4 agents, 1 hour, faults on |
+| p95 ingest time (as the agents saw it) | under 500 ms | **133 ms** (server side: Apache 128 ms, PHP 71 ms) |
+| Lost | 0 | **0**, all 26 tables matching; 0 again after the day run (738,520 lines) |
+| MB per host per day (MS-DAT-06) | reported | **111.3** (servers 120.0, laptops 101.8), on the simulator's estimated volume |
+
+- Every request answered 200; 10 fault lines quarantined as designed; resends counted as duplicates; 0 answer mismatches.
+- Throughput seen: about 6,200 lines per s on catch-up batches of 1,160 lines.
+- **Hardware found:** no SSD on the Unraid server; the VM disk is on the hard-drive array (sync p50 17 ms). The gate still passes with room to spare. Kept as it is (M-050).
+
+**Open from milestone 2:**
+- **MPD-37:** what the 111 MB per host per day means for disk and retention (decide before milestone 4).
+- **MPD-35:** the simulator's volume is an estimate. Compare with the real agent on the dev machine once agent 5c can send.
+- MS-ING-10 and MS-UI-08 at 500 hosts: on production hardware (M-050).
+
 ## Milestone 1 report (2026-11-18)
 
 **What was built:**
@@ -229,15 +256,17 @@ Server: `innodb_flush_log_at_trx_commit = 1`, buffer pool 3,072 MB, binlog off.
   - MS-SEC-02: the CA key's file access. Revocation comes with milestone 3;
   - MS-SEC-04: three database users with tested table-level grants;
   - MS-SEC-12: automatic security updates.
-- **Designed and approved but not built:** MS-ING-01 to 06, 08, 09 and 12, and MS-DAT-01, 02, 04 and 05.
-- **Measured in milestone 2:** MS-ING-10 and MS-DAT-06.
-- **Every other Must** (enrolment, retention, dashboard, alerts, operations) is open, in milestones 2 to 7.
+- **Met in milestone 2:** MS-ING-01 to 05, 08, 09 and 12; MS-DAT-01 (migrations 0001, 0002); MS-DAT-06 (measured: 111.3 MB per host per day; the disk sizing is MPD-37).
+- **Met at the M-050 gate, open at 500 hosts:** MS-ING-10 (p95 133 ms at 4 hosts), verified on production hardware.
+- **Stored, not yet shown:** MS-DAT-05 (the fields are kept; the dashboard shows them in milestones 5 and 6). MS-DAT-04 (flows combined in queries) comes with the dashboard.
+- **Not built yet:** MS-ING-06 and 07 (milestone 3); MS-DAT-02 and 03 (milestone 4).
+- **Every other Must** (enrolment, retention, dashboard, alerts, operations) is open, in milestones 3 to 7.
 - **Only partly met:** MS-OPS-07 (rebuild from the repo). setup.md and the scripts cover the server; the app, timers and restore come later.
 
 ## Next steps
 
-1. **Milestone 2:** built and deployed; the gate run is next.
-2. **The milestone 2 gate** (M-050): 2 simulated servers and 2 simulated laptops for an hour with faults, 0 lost, p95 under 500 ms, then a `--day` run for MB per host per day. No VM resize needed.
+1. **The owner's sign-off on milestone 2** (gate passed 2026-11-20; report above), and an answer to MPD-37 before milestone 4.
+2. **Milestone 3 (enrolment)** after the sign-off: a plan first.
 3. **Agent 5c can start now** from the approved contract (ingest-api.md §10), collector address 192.168.0.191. Agents pin the agent CA SHA-256 shown above.
 4. **For the tech lead:** copy the changes in the repo's `mothership-plan.md` and CLAUDE.md (M-042, M-050) to the master plan, if one is kept elsewhere.
 
