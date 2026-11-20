@@ -137,6 +137,11 @@ Also on the VM in `/etc/aio-mothership/pki/public/fingerprints.txt`. If 07 ever 
 - Ingest time: simulator (client) p50 76 ms, p95 360 ms, p99 508 ms; Apache p95 355 ms; PHP to COMMIT p50 14 ms, p95 258 ms. Under 500 ms, but high for 1 request per second; being looked into before scaling up.
 - 1 answer mismatch, a simulator bug: it counted the seq of a deliberately broken (non-JSON) line towards the expected `acked_seq`, which the server can't read. Fixed in `SimAgent`.
 
+**Gate run (2026-11-19/20, M-050: 2 servers and 2 laptops, 3,600 s, faults on):**
+- Reconcile: **0 LOST**, 0 extra rows, 4 agents, all 26 tables matching (e.g. 25,185 net_flows, 1,912 process_events, 956 command lines, 740 services, 10 quarantined fault lines).
+- Server and laptop inventories as expected: 360 apps (2 × 60 + 2 × 120), 740 services (2 × 120 + 2 × 250), IIS, SQL Server and roles on the 2 servers only.
+- Simulator summary and latency: pending.
+
 **Ingest benchmark (2026-11-19, `tools/bench-ingest.php 10`, no HTTP, `aio_test`):**
 
 | Phase (warm median, ms) | Inventory (193 lines, 15 tables) | Flows (24 lines) |
