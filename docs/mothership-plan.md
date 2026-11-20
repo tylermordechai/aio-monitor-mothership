@@ -246,7 +246,7 @@ Seven milestones, one at a time, each ending in a test you can check; milestone 
 | 2 | Ingest | Ingest endpoint, dedup, quarantine; agent simulator; size per host per day | 2 simulated servers and 2 simulated laptops: p95 under 500 ms, 0 lost; MB per host per day for each (M-050) |
 | 3 | Enrolment | One-time tokens, certificate signing, revocation, agent check-ins | Revoked agent refused, silent agent flagged |
 | 4 | Retention | Daily partitions, retention, nightly summaries, health checks (backups moved to "before ready to ship", M-026) | On simulator data: partitions made 7 days ahead and dropped at retention; summaries match detail; each health check fires and clears (M-031) |
-| 5 | Dashboard core | Sign-in, roles, audit log, fleet overview, host detail | Every page under 5 s at 500 hosts, 7 days |
+| 5 | Dashboard core | Sign-in, roles, audit log, fleet overview, host detail | Every page under 5 s at 2 servers and 2 laptops, 7 days (M-050) |
 | 6 | Dashboard full | Connections, history, search, export; enrichment: DNS, reputation | Views match agent data on simulator output |
 | 7 | Alerts and pilot | Alert rules, allow-lists; agent transport live on pilot hosts | Pilot go/no-go; privacy sign-off done |
 

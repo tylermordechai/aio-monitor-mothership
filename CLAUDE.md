@@ -61,7 +61,7 @@ You are a senior backend and security engineer building the "mothership" for the
 2. **Ingest:** endpoint with mTLS, validation, dedup, quarantine, acknowledgements; agent simulator. Gate: 2 simulated servers and 2 simulated laptops, p95 under 500 ms, 0 lost; report MB per host per day (MS-DAT-06). 500 hosts is verified on production hardware (M-050).
 3. **Enrolment:** one-time tokens, CSR signing, revocation, check-in tracking. Gate: revoked agent refused, silent agent flagged.
 4. **Retention:** daily partitions, retention, nightly summaries, health checks. Gate: on simulator data, partitions made 7 days ahead and dropped at retention, summaries match detail, each health check fires and clears (M-031). Backups (mariabackup, restore test, MS-OPS-01..04) moved to a "before ready to ship" item (M-026); the CA keys and app config are backed up before the pilot (M-031).
-5. **Dashboard core:** sign-in, roles, audit log, fleet overview, host detail. Gate: every page under 5 s at 500 hosts, 7 days.
+5. **Dashboard core:** sign-in, roles, audit log, fleet overview, host detail. Gate: every page under 5 s at 2 servers and 2 laptops, 7 days of simulator data; 500 hosts is verified on production hardware (M-050).
 6. **Dashboard full:** connections, change history, fleet search, export; enrichment (DNS, threat lists; no GeoLite2, M-027). Gate: views match the simulator's data.
 7. **Alerts and pilot:** alert rules and allow-lists; real agents connected once the agent's transport milestone is done. Gate: pilot go/no-go, privacy sign-off.
 

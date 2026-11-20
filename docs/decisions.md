@@ -423,3 +423,4 @@ Proposed in [ingest-api.md](ingest-api.md) and `db/migrations/0001_initial.sql`,
 - **500 hosts:** still the design target. MS-ING-10 (500 agents, p95 under 500 ms) and MS-UI-08 (pages under 5 s at 500 hosts) stay Must, verified on the production hardware, not on this VM.
 - **The database sync stays on** (`innodb_flush_log_at_trx_commit = 1`): relaxing it would make acknowledgements faster but could lose an acknowledged batch in a power cut, after the agent deleted it.
 - **Snapshots:** kept for now. Once the project reaches a working state with a readable dashboard, the chain is merged into one raw file and the snapshot files are removed. Until then, reverting a snapshot also throws away everything ingested since it was taken.
+- **Milestone 5 gate (owner, 2026-11-19):** the same change: every page under 5 s at 2 simulated servers and 2 simulated laptops with 7 days of data. MS-UI-08 at 500 hosts is verified on the production hardware.
