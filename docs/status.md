@@ -140,7 +140,10 @@ Also on the VM in `/etc/aio-mothership/pki/public/fingerprints.txt`. If 07 ever 
 **Gate run (2026-11-19/20, M-050: 2 servers and 2 laptops, 3,600 s, faults on):**
 - Reconcile: **0 LOST**, 0 extra rows, 4 agents, all 26 tables matching (e.g. 25,185 net_flows, 1,912 process_events, 956 command lines, 740 services, 10 quarantined fault lines).
 - Server and laptop inventories as expected: 360 apps (2 × 60 + 2 × 120), 740 services (2 × 120 + 2 × 250), IIS, SQL Server and roles on the 2 servers only.
-- Simulator summary and latency: pending.
+- Server times (`measure.php latency`, 02:07:43 to 03:07:43 UTC): 1,428 ingest batches, all 200, 31,844 rows stored (9 per s).
+  - PHP to COMMIT: p50 9 ms, **p95 71 ms**, p99 127 ms, max 351 ms.
+  - Apache, whole request including TLS and upload: p50 64 ms, **p95 128 ms**, p99 201 ms.
+- Simulator summary (client-side p95, the gate figure, M-049): pending.
 
 **Ingest benchmark (2026-11-19, `tools/bench-ingest.php 10`, no HTTP, `aio_test`):**
 
