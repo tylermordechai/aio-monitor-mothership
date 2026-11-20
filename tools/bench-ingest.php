@@ -42,7 +42,7 @@ $run = static function (array $records) use ($a, $svc, $auth): array {
     $agent = $auth->authenticate($req);
     $authMs = round((microtime(true) - $t) * 1000, 1);
     $r = $svc->handle($req, $agent);
-    return ['lines' => $r->body['lines'], 'auth' => $authMs] + $svc->timings;
+    return ['n' => $r->body['lines'], 'auth' => $authMs] + $svc->timings;
 };
 
 $shapes = [

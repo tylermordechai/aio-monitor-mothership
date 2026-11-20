@@ -137,6 +137,23 @@ Also on the VM in `/etc/aio-mothership/pki/public/fingerprints.txt`. If 07 ever 
 - Ingest time: simulator (client) p50 76 ms, p95 360 ms, p99 508 ms; Apache p95 355 ms; PHP to COMMIT p50 14 ms, p95 258 ms. Under 500 ms, but high for 1 request per second; being looked into before scaling up.
 - 1 answer mismatch, a simulator bug: it counted the seq of a deliberately broken (non-JSON) line towards the expected `acked_seq`, which the server can't read. Fixed in `SimAgent`.
 
+**Ingest benchmark (2026-11-19, `tools/bench-ingest.php 10`, no HTTP, `aio_test`):**
+
+| Phase (warm median, ms) | Inventory (193 lines, 15 tables) | Flows (24 lines) |
+| --- | --- | --- |
+| auth (includes its own check-in commit) | 7.3 | 7.4 |
+| read, setup, finish | 2.4 | 2.1 |
+| PHP validation and row building (total minus the rest) | about 9 | about 11 |
+| db (row statements) | 131.6 (range 95 to 200) | 4.8 (range 4.6 to 64) |
+| commit | 46.4 | 42.6 (range 22 to 101) |
+| total | 189.9 | 65.5 |
+
+Server: `innodb_flush_log_at_trx_commit = 1`, buffer pool 3,072 MB, binlog off.
+- **PHP isn't the cost:** about 10 ms per request.
+- **COMMIT takes 22 to 101 ms** even for 24 lines. That's the disk sync of the redo log, which a fast SSD does in under 1 ms, so the VM's disk sync is slow. Turning the sync off (`flush_log_at_trx_commit = 2`) isn't an option: an acknowledged batch could be lost in a power cut, after the agent has deleted it.
+- **Random stalls** in every phase (auth 97 ms, flows db 64 ms) on an otherwise idle VM point at the host: either the disk or CPU contention on Unraid.
+- Next: measure the disk sync on its own (`tools/fsync-test.php`) and CPU steal (`vmstat`), then check the Unraid disk settings during the resize.
+
 **Before the VM:** unit tests and `php -l` on the PC with a portable PHP 8.5.13 (`C:\dev\tools\php`, not in the repo). Nothing has run against MariaDB or Apache yet.
 
 **Found while building:**
