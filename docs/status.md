@@ -159,6 +159,12 @@ Server: `innodb_flush_log_at_trx_commit = 1`, buffer pool 3,072 MB, binlog off.
 - `fsync-test.php`, 200 syncs of 4 KB: **p50 17.2 ms, p95 45.7 ms, p99 64.3 ms, max 97.5 ms.** An SSD does this in under 1 ms.
 - `vmstat`: CPU 95 to 100 % idle, steal (`st`) 0, wait (`wa`) 0 to 5 %.
 
+**Unraid disk definition (2026-11-19):**
+- VirtIO bus, `cache='writeback'`.
+- The disk is a chain of 3 qcow2 snapshot files over `vdisk1.img` (raw): `m1-done`, then `m1-ssh`, then `m0-off`.
+- Every file is reached through `/mnt/user/`, Unraid's user-share (FUSE) layer.
+- Both the snapshot chain and the `/mnt/user` path are known to make disk syncs slow.
+
 **Finding:** the slow ingest commits come from the disk under the VM, not from the CPU or the code. The cause is on the Unraid side (where the vDisk is stored and its format); it'll be checked and fixed during the resize, before the gate.
 
 **Before the VM:** unit tests and `php -l` on the PC with a portable PHP 8.5.13 (`C:\dev\tools\php`, not in the repo). Nothing has run against MariaDB or Apache yet.
