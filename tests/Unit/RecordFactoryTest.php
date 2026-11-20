@@ -35,6 +35,29 @@ final class RecordFactoryTest extends TestCase
         self::assertSame([], array_values(array_diff(array_keys(RecordTypes::TYPES), array_keys($seen))), 'every record type is covered');
     }
 
+    /** M-050: a laptop's inventory has no server software and still builds cleanly. */
+    public function testLaptopInventoryHasNoServerSoftware(): void
+    {
+        $now = time();
+        $f = new RecordFactory(LineValidatorTest::AGENT, LineValidatorTest::HOST, 'SIM-0003');
+        $records = $f->inventory((float) $now, 5, 5, false);
+        $types = array_count_values(array_column($records, 'record_type'));
+        foreach (['inv_role', 'inv_iis', 'inv_iis_site', 'inv_iis_app_pool', 'inv_sql_instance', 'inv_server_app'] as $t) {
+            self::assertArrayNotHasKey($t, $types);
+        }
+        self::assertSame(2, $types['inventory_snapshot'], 'start and end markers');
+        self::assertSame(1, $types['host_facts']);
+        $v = new LineValidator(LineValidatorTest::AGENT, LineValidatorTest::HOST, [], [], 1_048_576, 86_400, $now);
+        $b = new RowBuilder(1, 1, 1);
+        foreach ($records as $i => $rec) {
+            $p = $v->check($i, json_encode($rec));
+            self::assertInstanceOf(ParsedLine::class, $p);
+            self::assertArrayNotHasKey('extra', $b->build($p)->row, $rec['record_type']);
+        }
+        $facts = array_values(array_filter($records, static fn ($r) => $r['record_type'] === 'host_facts'))[0];
+        self::assertSame('Windows 11 Pro', $facts['data']['os_product_name']);
+    }
+
     public function testSeqIncreasesAndTsHasSevenDigits(): void
     {
         $f = new RecordFactory(LineValidatorTest::AGENT, LineValidatorTest::HOST, 'SIM-0001', 100);

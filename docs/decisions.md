@@ -413,3 +413,13 @@ Proposed in [ingest-api.md](ingest-api.md) and `db/migrations/0001_initial.sql`,
 - **0 lost:** each simulated agent keeps, across runs, the rows it expects from acknowledged lines (executables and gaps by their natural key). `tools/reconcile.php` compares that with the database per agent and table.
 - **Figures:** `tools/measure.php latency` (from `ingest_batches` and Apache's `%D`), `tools/measure.php size` (MB per host per day from table sizes). The simulator reports client-side p95, which is the gate figure: it is the strictest.
 - **Volume per host** is `Aio\Sim\Profile`: 20 flows per 10 s, a snapshot every 5 minutes (40 connections, 12 listeners, 6 UDP), 2 process start/stop pairs a minute, ETW status every minute, a new executable every 5 minutes, a full inventory (60 apps, 120 services) at start and daily. These are estimates.
+
+### M-050 Milestone 2 gate at 2 servers and 2 laptops; the hardware stays as it is (MPD-36)
+**Requirements:** MS-ING-10, MS-DAT-06, MS-UI-08, CLAUDE.md milestone 2 · **Status:** Accepted 2026-11-19 (owner)
+- **Found:** the Unraid server has no SSD (ten 1.2 TB 10k SAS hard drives, seven in the parity array, no pool). The VM disk is on `disk1` in the array, as 3 qcow2 snapshots over a raw file, reached through `/mnt/user`. A disk sync takes p50 17 ms, p95 46 ms, max 97 ms, and every ingest COMMIT waits for one.
+- **Gate:** milestone 2's gate is **2 simulated servers and 2 simulated laptops** (`simulate.php --agents=4 --laptops=2 --duration=3600 --faults`), p95 under 500 ms, 0 lost, with MB per host per day reported for each kind. It replaces the 500-host gate.
+- **Laptops** use `Profile::LAPTOP`: Windows 11, more apps and services, more short-lived connections and processes, no roles, IIS, SQL Server or server apps. Estimates, *(confirm)* with MPD-35.
+- **Hardware:** stays as it is for development and the pilot. No resize before the gate: 2 vCPU, 8 GB and 100 GB are enough for 4 hosts. Production hardware (SSD, size) is specified before production, with the backup work (M-026).
+- **500 hosts:** still the design target. MS-ING-10 (500 agents, p95 under 500 ms) and MS-UI-08 (pages under 5 s at 500 hosts) stay Must, verified on the production hardware, not on this VM.
+- **The database sync stays on** (`innodb_flush_log_at_trx_commit = 1`): relaxing it would make acknowledgements faster but could lose an acknowledged batch in a power cut, after the agent deleted it.
+- **Snapshots:** kept for now. Once the project reaches a working state with a readable dashboard, the chain is merged into one raw file and the snapshot files are removed. Until then, reverting a snapshot also throws away everything ingested since it was taken.

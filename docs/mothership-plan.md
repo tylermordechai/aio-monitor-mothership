@@ -59,7 +59,7 @@ Start the pilot VM at 4 vCPU, 16 GB RAM and a 250 GB disk on Unraid's SSD cache 
 | Database disk | 250 GB | 1.5 TB | Estimate: about 25 MB per host per day of detail × 90 days, plus summaries and indexes *(replace with measured figure in milestone 2)* |
 | Backup space | 2× database size | 2× database size | On an Unraid array share, outside the VM |
 
-**Planned resize:** the VM is built at 2 vCPU, 8 GB RAM and 100 GB disk for milestone 1, then raised to the pilot size (4 vCPU, 16 GB, 250 GB) before the milestone 2 gate, so the 500-host load test measures the code, not a too-small VM. That's a VM stop and restart on Unraid, not a change to the pilot sizing.
+**Development VM (M-050):** 2 vCPU, 8 GB RAM and a 100 GB disk on the Unraid array (the server has hard drives only, no SSD), kept as it is through development and the pilot. The sizes in the table are for production hardware, specified before production with the backup work (M-026); MS-ING-10 and MS-UI-08 at 500 hosts are verified there.
 
 **Unraid settings**
 
@@ -243,7 +243,7 @@ Seven milestones, one at a time, each ending in a test you can check; milestone 
 | # | Milestone | What gets built | Gate to pass |
 | --- | --- | --- | --- |
 | 1 | Server and contract | VM, Apache, PHP, MariaDB, TLS, firewall; agent CA; `docs/ingest-api.md` and schema | API contract and schema approved by the user |
-| 2 | Ingest | Ingest endpoint, dedup, quarantine; agent simulator; size per host per day | 500 simulated hosts: p95 under 500 ms, 0 lost |
+| 2 | Ingest | Ingest endpoint, dedup, quarantine; agent simulator; size per host per day | 2 simulated servers and 2 simulated laptops: p95 under 500 ms, 0 lost; MB per host per day for each (M-050) |
 | 3 | Enrolment | One-time tokens, certificate signing, revocation, agent check-ins | Revoked agent refused, silent agent flagged |
 | 4 | Retention | Daily partitions, retention, nightly summaries, health checks (backups moved to "before ready to ship", M-026) | On simulator data: partitions made 7 days ahead and dropped at retention; summaries match detail; each health check fires and clears (M-031) |
 | 5 | Dashboard core | Sign-in, roles, audit log, fleet overview, host detail | Every page under 5 s at 500 hosts, 7 days |

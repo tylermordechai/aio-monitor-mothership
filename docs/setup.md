@@ -249,7 +249,7 @@ sudo php tools/dev-agents.php delete                         # removes every sim
 
 - **Simulated agents** are in host group `simulator`, with certificates from the agent CA (M-049). `delete` removes only them.
 - **`--day`** makes 24 hours of records per agent with past timestamps and sends them as fast as the server takes them. Use it with a few agents (`--agents=20 --day`) for the size figure.
-- **The gate run** (after the VM resize): `--agents=500 --duration=3600 --faults`. The simulator prints progress every 10 s and a summary at the end, written to `/var/lib/aio-mothership/sim/runs/<time>/summary.json`.
+- **The gate run** (M-050): `--agents=4 --laptops=2 --duration=3600 --faults`, 2 servers and 2 laptops. `--laptops=N` makes the last N agents Windows 11 laptops. The simulator prints progress every 10 s and a summary at the end, written to `/var/lib/aio-mothership/sim/runs/<time>/summary.json`.
 
 ## What ends up where on the VM
 

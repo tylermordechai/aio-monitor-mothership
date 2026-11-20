@@ -8,7 +8,7 @@
  * (ingest-api.md §8.1). Root only (it reads the test keys).
  *
  *   sudo php tools/simulator/simulate.php --agents=10 --duration=120
- *   sudo php tools/simulator/simulate.php --agents=500 --duration=3600 --faults   # the gate run
+ *   sudo php tools/simulator/simulate.php --agents=4 --laptops=2 --duration=3600 --faults   # the gate run (M-050)
  *   sudo php tools/simulator/simulate.php --agents=20 --day                       # 24 h of data, fast (MS-DAT-06)
  *
  * Options:
@@ -19,7 +19,8 @@
  *   --faults          now and then: resend a batch, add a bad or unknown line
  *   --day             make 24 hours of records per agent (timestamps in the past) and send them back to back
  *   --concurrency=N   requests in flight at most (default 64)
- *   --profile=JSON    override Aio\Sim\Profile values, e.g. '{"flows_per_window":40}'
+ *   --laptops=N       the last N of those agents act as Windows 11 laptops (Profile::LAPTOP), the rest as servers (default 0)
+ *   --profile=JSON    override Aio\Sim\Profile values for all of them, e.g. '{"flows_per_window":40}'
  *
  * Writes /var/lib/aio-mothership/sim/runs/<time>/summary.json and keeps each
  * agent's seq and expected row counts in sim/state/, for tools/reconcile.php.
@@ -35,7 +36,7 @@ use Aio\Util\Uuid;
 
 const SIM_DIR = '/var/lib/aio-mothership/sim';
 
-$o = getopt('', ['agents:', 'duration:', 'interval:', 'heartbeat:', 'faults', 'day', 'concurrency:', 'profile:', 'url:', 'ca:']);
+$o = getopt('', ['agents:', 'duration:', 'interval:', 'heartbeat:', 'faults', 'day', 'concurrency:', 'profile:', 'laptops:', 'url:', 'ca:']);
 $ip = trim((string) shell_exec('. ' . escapeshellarg(dirname(__DIR__, 2) . '/setup/env.sh') . ' && echo $AIO_IP'));
 $url = (string) ($o['url'] ?? "https://$ip:8443");
 $ca = (string) ($o['ca'] ?? '/etc/aio-mothership/pki/public/agent-ca.crt');
@@ -45,7 +46,9 @@ $duration = (int) ($o['duration'] ?? 60);
 $faults = isset($o['faults']);
 $dayMode = isset($o['day']);
 $maxConc = (int) ($o['concurrency'] ?? 64);
-$profile = Profile::with(isset($o['profile']) ? (array) json_decode((string) $o['profile'], true) : []);
+$over = isset($o['profile']) ? (array) json_decode((string) $o['profile'], true) : [];
+$profile = Profile::with($over);
+$laptopProfile = Profile::with($over, true);
 
 $ids = json_decode((string) @file_get_contents(SIM_DIR . '/agents.json'), true);
 if (!is_array($ids) || $ids === []) {
@@ -61,10 +64,12 @@ $t0 = microtime(true);
 $simStart = $dayMode ? $t0 - 86_400 : $t0;
 /** @var array<string, SimAgent> $agents */
 $agents = [];
-foreach ($ids as $id) {
+$laptops = min(count($ids), max(0, (int) ($o['laptops'] ?? 0)));
+foreach ($ids as $i => $id) {
+    $isLaptop = $i >= count($ids) - $laptops;
     $statePath = SIM_DIR . "/state/{$id['agent_id']}.json";
     $state = is_file($statePath) ? (array) json_decode((string) file_get_contents($statePath), true) : [];
-    $agents[$id['agent_id']] = new SimAgent($id, $profile, $state, $simStart, $interval, $hbEvery, $faults);
+    $agents[$id['agent_id']] = new SimAgent($id, $isLaptop ? $laptopProfile : $profile, $state, $simStart, $interval, $hbEvery, $faults);
 }
 $saveStates = static function () use (&$agents): void {
     foreach ($agents as $a) {
@@ -109,7 +114,7 @@ $drainDeadline = null;
 $nextReport = $t0 + 10;
 $nextSave = $t0 + 60;
 $dayCursor = $simStart;
-fprintf(STDOUT, "%s: %d agents, %s, faults %s, target %s\n", gmdate('H:i:s'), count($agents), $dayMode ? '24 h of data back to back' : "live for {$duration}s", $faults ? 'on' : 'off', $url);
+fprintf(STDOUT, "%s: %d agents (%d laptops), %s, faults %s, target %s\n", gmdate('H:i:s'), count($agents), $laptops, $dayMode ? '24 h of data back to back' : "live for {$duration}s", $faults ? 'on' : 'off', $url);
 
 while (true) {
     $now = microtime(true);
@@ -240,7 +245,9 @@ $summary = [
     'seconds' => round($t1 - $t0, 1),
     'agents' => count($agents),
     'faults' => $faults,
+    'laptops' => $laptops,
     'profile' => $profile,
+    'laptop_profile' => $laptopProfile,
     'requests' => $stats['requests'],
     'requests_per_s' => round($stats['requests'] / max(1, $t1 - $t0), 1),
     'lines_acked' => $stats['lines'],

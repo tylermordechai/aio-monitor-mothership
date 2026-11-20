@@ -107,7 +107,7 @@ final class SimAgent
             $this->nextExe += $p['executable_every_s'];
         }
         if ($now >= $this->nextInventory) {
-            $this->enqueue($f->inventory($now, $p['inventory_apps'], $p['inventory_services']));
+            $this->enqueue($f->inventory($now, $p['inventory_apps'], $p['inventory_services'], (bool) $p['server']));
             $this->nextInventory += $p['inventory_every_s'];
         }
         if ($now >= $this->nextChange) {

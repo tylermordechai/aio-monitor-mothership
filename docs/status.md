@@ -167,7 +167,8 @@ Server: `innodb_flush_log_at_trx_commit = 1`, buffer pool 3,072 MB, binlog off.
 
 - The `domains` share: primary storage **Array**, no secondary storage, no mover action. The VM disk sits on the parity-protected hard-drive array, not on the SSD cache pool the platform assumes (CLAUDE.md, Platform). Each sync waits for a data-disk write plus a parity write.
 
-- Unraid host: no SSD and no pool. Ten 1.2 TB 10k SAS hard drives (HGST HUC101812CSS205), seven of them array data drives; the VM files are on `disk1`. Open decision: MPD-36.
+- Unraid host: no SSD and no pool. Ten 1.2 TB 10k SAS hard drives (HGST HUC101812CSS205), seven of them array data drives; the VM files are on `disk1`.
+- **Decided (M-050):** the hardware stays as it is; the milestone 2 gate is 2 servers and 2 laptops; 500 hosts is verified on production hardware; snapshots are merged once there is a working, readable dashboard.
 
 **Finding:** the slow ingest commits come from the disk under the VM, not from the CPU or the code. The cause is on the Unraid side (where the vDisk is stored and its format); it'll be checked and fixed during the resize, before the gate.
 
@@ -219,10 +220,10 @@ Server: `innodb_flush_log_at_trx_commit = 1`, buffer pool 3,072 MB, binlog off.
 
 ## Next steps
 
-1. **The owner's go-ahead for milestone 2** (ingest, simulator, load test). A plan comes first: files, approach and requirement IDs.
-2. **Before the milestone 2 gate:** resize the VM to the pilot size (4 vCPU, 16 GB, 250 GB), so the 500-host test measures the code.
+1. **Milestone 2:** built and deployed; the gate run is next.
+2. **The milestone 2 gate** (M-050): 2 simulated servers and 2 simulated laptops for an hour with faults, 0 lost, p95 under 500 ms, then a `--day` run for MB per host per day. No VM resize needed.
 3. **Agent 5c can start now** from the approved contract (ingest-api.md §10), collector address 192.168.0.191. Agents pin the agent CA SHA-256 shown above.
-4. **For the tech lead:** copy the changes in the repo's `mothership-plan.md` and CLAUDE.md (M-042) to the master plan, if one is kept elsewhere.
+4. **For the tech lead:** copy the changes in the repo's `mothership-plan.md` and CLAUDE.md (M-042, M-050) to the master plan, if one is kept elsewhere.
 
 ## Before the pilot (M-031)
 

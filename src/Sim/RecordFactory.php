@@ -262,10 +262,11 @@ final class RecordFactory
 
     /**
      * A full inventory snapshot: start marker, items of every kind, end marker.
+     * A laptop ($server false, M-050) has no roles, IIS, SQL Server or server apps.
      *
      * @return list<array<string, mixed>>
      */
-    public function inventory(float $ts, int $apps = 60, int $services = 120): array
+    public function inventory(float $ts, int $apps = 60, int $services = 120, bool $server = true): array
     {
         $snap = 'inv-' . substr(Uuid::v4(), 0, 8);
         $out = [$this->envelope('inventory_snapshot', ['snapshot_id' => $snap, 'event' => 'start', 'reason' => 'scheduled'], $ts)];
@@ -286,12 +287,20 @@ final class RecordFactory
         $out[] = $this->envelope('inv_task', ['path' => '\\Contoso\\Nightly', 'enabled' => true, 'run_as' => 'CORP\\svc-tasks', 'actions' => [['type' => 'exec', 'command' => 'C:\\Scripts\\nightly.cmd']], 'triggers' => [['type' => 'daily']]], $ts);
         $out[] = $this->envelope('inv_startup', ['location' => 'HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run', 'name' => 'ContosoTray', 'command' => '"C:\\Program Files\\Contoso\\tray.exe"', 'enabled' => true], $ts);
         $out[] = $this->envelope('inv_driver', ['name' => 'Tcpip', 'display_name' => 'TCP/IP Protocol Driver', 'image_path' => '\\SystemRoot\\System32\\drivers\\tcpip.sys', 'start_type' => 'boot', 'type' => 'kernel', 'state' => 'running', 'loaded' => true], $ts);
-        $out[] = $this->envelope('inv_role', ['name' => 'Web-Server', 'display_name' => 'Web Server (IIS)', 'install_state' => 1, 'installed' => true], $ts);
+        $os = $server
+            ? ['os_product_name' => 'Windows Server 2022 Standard', 'os_version' => '10.0.20348', 'os_display_version' => '21H2', 'manufacturer' => 'Contoso Virtual', 'if' => 'Ethernet']
+            : ['os_product_name' => 'Windows 11 Pro', 'os_version' => '10.0.26100', 'os_display_version' => '24H2', 'manufacturer' => 'Contoso Laptops', 'if' => 'Wi-Fi'];
         $out[] = $this->envelope('host_facts', [
-            'hostname' => $this->hostname, 'dns_domain' => 'corp.example', 'join_type' => 'domain', 'os_product_name' => 'Windows Server 2022 Standard',
-            'os_version' => '10.0.20348', 'os_display_version' => '21H2', 'last_boot' => '2026-11-10T02:00:00Z', 'logical_cpus' => 4,
-            'memory_bytes' => 17_179_869_184, 'manufacturer' => 'Contoso Virtual', 'interfaces' => [['name' => 'Ethernet', 'addresses' => [$this->localIp()]]],
+            'hostname' => $this->hostname, 'dns_domain' => 'corp.example', 'join_type' => 'domain', 'os_product_name' => $os['os_product_name'],
+            'os_version' => $os['os_version'], 'os_display_version' => $os['os_display_version'], 'last_boot' => '2026-11-10T02:00:00Z', 'logical_cpus' => $server ? 4 : 8,
+            'memory_bytes' => 17_179_869_184, 'manufacturer' => $os['manufacturer'], 'interfaces' => [['name' => $os['if'], 'addresses' => [$this->localIp()]]],
         ], $ts);
+        if (!$server) {
+            $out[] = $this->envelope('inventory_link_index', ['reason' => 'scheduled', 'duration_ms' => 180, 'component_keys' => 9000, 'products' => $apps + 1], $ts);
+            $out[] = $this->envelope('inventory_snapshot', ['snapshot_id' => $snap, 'event' => 'end', 'reason' => 'scheduled', 'duration_ms' => 3100, 'sources' => ['apps' => ['items' => $apps], 'services' => ['items' => $services]]], $ts);
+            return $out;
+        }
+        $out[] = $this->envelope('inv_role', ['name' => 'Web-Server', 'display_name' => 'Web Server (IIS)', 'install_state' => 1, 'installed' => true], $ts);
         $out[] = $this->envelope('inv_iis', ['installed' => true, 'version' => '10.0', 'read' => 'ok', 'sites' => 1, 'app_pools' => 1, 'config_path' => 'C:\\Windows\\System32\\inetsrv\\config\\applicationHost.config'], $ts);
         $out[] = $this->envelope('inv_iis_site', ['name' => 'Default Web Site', 'id' => 1, 'auto_start' => true, 'bindings' => [['protocol' => 'https', 'ip' => '*', 'port' => 443, 'host' => '']], 'physical_path' => '%SystemDrive%\\inetpub\\wwwroot', 'app_pool' => 'DefaultAppPool'], $ts);
         $out[] = $this->envelope('inv_iis_app_pool', ['name' => 'DefaultAppPool', 'managed_runtime_version' => 'v4.0', 'pipeline_mode' => 'integrated', 'identity_type' => 'ApplicationPoolIdentity', 'auto_start' => true], $ts);

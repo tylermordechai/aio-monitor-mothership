@@ -30,7 +30,7 @@ You are a senior backend and security engineer building the "mothership" for the
 
 ## Platform
 
-- Ubuntu Server 26.04.1 LTS (M-029) in a VM on Unraid, disk on the SSD cache pool, bridged network with the fixed IP 192.168.0.191 and no DNS name (M-024), internal network only. ufw allows 22, 443 and 8443 from 192.168.0.0/24 only (M-025).
+- Ubuntu Server 26.04.1 LTS (M-029) in a VM on Unraid, disk on the Unraid array (hard drives only, no SSD; production hardware specified later, M-050), bridged network with the fixed IP 192.168.0.191 and no DNS name (M-024), internal network only. ufw allows 22, 443 and 8443 from 192.168.0.0/24 only (M-025).
 - Two private CAs on the VM: the **agent CA** (agent client certificates and the 8443 server certificate) and the **web CA**, name-constrained to 192.168.0.0/24, for the 443 dashboard certificate (M-024, M-037).
 - Apache 2.4, MariaDB 11.8 LTS, PHP 8.5, all from Ubuntu's own packages (no third-party repositories; M-029). MariaDB's data directory is `/var/lib/mariadb`, not `/var/lib/mysql`. Composer for dependencies; ask before adding any library and say why, with its licence and maintenance status.
 - Background jobs (enrichment, alert rules, retention, summaries, backups) run as PHP CLI scripts from systemd timers, never from web requests.
@@ -58,7 +58,7 @@ You are a senior backend and security engineer building the "mothership" for the
 ## Milestones (one at a time; don't start the next until I confirm)
 
 1. **Server and contract:** VM setup, Apache, PHP, MariaDB, TLS, firewall, agent CA, `docs/setup.md`. Write `docs/ingest-api.md` and the database schema; wait for my review. Gate: contract and schema approved.
-2. **Ingest:** endpoint with mTLS, validation, dedup, quarantine, acknowledgements; agent simulator. Gate: 500 simulated hosts, p95 under 500 ms, 0 lost; report MB per host per day (MS-DAT-06).
+2. **Ingest:** endpoint with mTLS, validation, dedup, quarantine, acknowledgements; agent simulator. Gate: 2 simulated servers and 2 simulated laptops, p95 under 500 ms, 0 lost; report MB per host per day (MS-DAT-06). 500 hosts is verified on production hardware (M-050).
 3. **Enrolment:** one-time tokens, CSR signing, revocation, check-in tracking. Gate: revoked agent refused, silent agent flagged.
 4. **Retention:** daily partitions, retention, nightly summaries, health checks. Gate: on simulator data, partitions made 7 days ahead and dropped at retention, summaries match detail, each health check fires and clears (M-031). Backups (mariabackup, restore test, MS-OPS-01..04) moved to a "before ready to ship" item (M-026); the CA keys and app config are backed up before the pilot (M-031).
 5. **Dashboard core:** sign-in, roles, audit log, fleet overview, host detail. Gate: every page under 5 s at 500 hosts, 7 days.
