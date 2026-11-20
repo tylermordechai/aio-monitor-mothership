@@ -424,3 +424,14 @@ Proposed in [ingest-api.md](ingest-api.md) and `db/migrations/0001_initial.sql`,
 - **The database sync stays on** (`innodb_flush_log_at_trx_commit = 1`): relaxing it would make acknowledgements faster but could lose an acknowledged batch in a power cut, after the agent deleted it.
 - **Snapshots:** kept for now. Once the project reaches a working state with a readable dashboard, the chain is merged into one raw file and the snapshot files are removed. Until then, reverting a snapshot also throws away everything ingested since it was taken.
 - **Milestone 5 gate (owner, 2026-11-19):** the same change: every page under 5 s at 2 simulated servers and 2 simulated laptops with 7 days of data. MS-UI-08 at 500 hosts is verified on the production hardware.
+
+### M-051 Milestone 2 signed off; laptops are test variety only
+**Requirements:** MS-ING-01..05, 08..10, 12, MS-DAT-06 · **Status:** Accepted 2026-11-20 (owner)
+- Milestone 2 is signed off as reported (status.md, "Milestone 2 report").
+- **v1 monitors servers.** The simulator's laptops are there for test variety only; figures for planning (MPD-37) use the server profile.
+- Pilot capacity (50 hosts) and disk sizing stay open in pending-decisions.md (MPD-37), decided later.
+
+### M-052 Milestone order: dashboard core next, then enrolment and retention
+**Requirements:** CLAUDE.md milestones · **Status:** Accepted 2026-11-20 (owner)
+- Order from here: **milestone 5 (dashboard core)** on simulator data, then **milestone 3 (enrolment)**, then **milestone 4 (retention)**. Milestones 6 and 7 follow as before. The numbers stay, so requirement and decision references don't change.
+- Effects: the dashboard is built before enrolment, so agents are still the simulator's (`tools/dev-agents.php`); "silent agent flagged" (milestone 3's gate) can already show on the map. Retention and partition jobs come after the dashboard, so the 7 days of simulator data are kept by hand until milestone 4.

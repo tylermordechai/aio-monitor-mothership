@@ -240,6 +240,8 @@ After this milestone **no collected data stays on the host** once the mothership
 
 Seven milestones, one at a time, each ending in a test you can check; milestone 1 needs no agent changes, so it can start now.
 
+Order from milestone 2 on (M-052): 5, then 3, then 4, then 6 and 7.
+
 | # | Milestone | What gets built | Gate to pass |
 | --- | --- | --- | --- |
 | 1 | Server and contract | VM, Apache, PHP, MariaDB, TLS, firewall; agent CA; `docs/ingest-api.md` and schema | API contract and schema approved by the user |

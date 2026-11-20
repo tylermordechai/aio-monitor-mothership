@@ -57,6 +57,8 @@ You are a senior backend and security engineer building the "mothership" for the
 
 ## Milestones (one at a time; don't start the next until I confirm)
 
+Order from milestone 2 on (M-052): 5, then 3, then 4, then 6 and 7.
+
 1. **Server and contract:** VM setup, Apache, PHP, MariaDB, TLS, firewall, agent CA, `docs/setup.md`. Write `docs/ingest-api.md` and the database schema; wait for my review. Gate: contract and schema approved.
 2. **Ingest:** endpoint with mTLS, validation, dedup, quarantine, acknowledgements; agent simulator. Gate: 2 simulated servers and 2 simulated laptops, p95 under 500 ms, 0 lost; report MB per host per day (MS-DAT-06). 500 hosts is verified on production hardware (M-050).
 3. **Enrolment:** one-time tokens, CSR signing, revocation, check-in tracking. Gate: revoked agent refused, silent agent flagged.

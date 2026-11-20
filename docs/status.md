@@ -2,12 +2,12 @@
 
 Last updated: 2026-11-20
 
-Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md); decisions are in [decisions.md](decisions.md) (M-001 to M-050); open items are in [pending-decisions.md](pending-decisions.md) (MPD-35, MPD-37); working rules are in [../CLAUDE.md](../CLAUDE.md).
+Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md); decisions are in [decisions.md](decisions.md) (M-001 to M-052); open items are in [pending-decisions.md](pending-decisions.md) (MPD-35, MPD-37); working rules are in [../CLAUDE.md](../CLAUDE.md).
 
 ## Pick up here
 
 - **Milestone 1 is signed off** (2026-11-19) by the owner. Snapshot `M1-done` taken with the VM shut down.
-- **Milestone 2: gate passed** (2026-11-20), waiting for the owner's sign-off. 2 simulated servers and 2 laptops (M-050): p95 133 ms, 0 lost, 111.3 MB per host per day. No VM resize; the hardware stays as it is (M-050).
+- **Milestone 2: signed off** (2026-11-20, M-051). 2 simulated servers and 2 laptops (M-050): p95 133 ms, 0 lost, 111.3 MB per host per day. No VM resize; the hardware stays as it is (M-050).
 - **The ingest contract (v1) is approved** (M-017). Agent 5c can build against it; the collector address is 192.168.0.191.
 - **The schema is approved** (2026-11-18): `06-mariadb.sh` printed `SCHEMA GATE: PASS` on MariaDB 11.8.6 from Ubuntu (M-017).
 - **The server is set up:** all of `setup/01` to `08` passed on the VM (Ubuntu Server 26.04.1 LTS, 192.168.0.191), run by the owner over SSH. The web CA is trusted on the owner's PC (thumbprint matched), and `https://192.168.0.191/health.php` loads with no certificate warning. Snapshot `M1-done` taken.
@@ -18,7 +18,7 @@ Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md
 | Milestone | Scope | State |
 | --- | --- | --- |
 | 1 | Server and contract | **Signed off** (2026-11-19). Done 2026-11-18. Contract approved (2026-11-13, M-017); schema approved (2026-11-18, schema gate passed); all 8 setup scripts passed on the VM; dashboard health page loads in the browser with the web CA |
-| 2 | Ingest, simulator, load test | **Gate passed** (2026-11-20, M-050): p95 133 ms, 0 lost, 111.3 MB per host per day. Waiting for sign-off |
+| 2 | Ingest, simulator, load test | **Signed off** (2026-11-20, M-051). Gate passed: p95 133 ms, 0 lost, 111.3 MB per host per day |
 | 3 | Enrolment | Not started |
 | 4 | Retention (backups moved to "before ready to ship", M-026) | Not started |
 | 5 | Dashboard core | Not started |
@@ -265,8 +265,8 @@ Server: `innodb_flush_log_at_trx_commit = 1`, buffer pool 3,072 MB, binlog off.
 
 ## Next steps
 
-1. **The owner's sign-off on milestone 2** (gate passed 2026-11-20; report above), and an answer to MPD-37 before milestone 4.
-2. **Milestone 3 (enrolment)** after the sign-off: a plan first.
+1. **Milestone 5 (dashboard core) next** (M-052): plan given 2026-11-20, waiting for the owner's OK. Then milestone 3 (enrolment), then 4 (retention).
+2. **Open, for later:** MPD-37 (disk sizing and pilot capacity), MPD-35 (simulator volume).
 3. **Agent 5c can start now** from the approved contract (ingest-api.md §10), collector address 192.168.0.191. Agents pin the agent CA SHA-256 shown above.
 4. **For the tech lead:** copy the changes in the repo's `mothership-plan.md` and CLAUDE.md (M-042, M-050) to the master plan, if one is kept elsewhere.
 
