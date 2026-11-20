@@ -85,6 +85,41 @@ if ($cmd === 'size') {
     $per = $total / 1_048_576 / $hosts / $days;
     printf("total %.1f MB: %.1f MB per host per day (MS-DAT-06)\n", $total / 1_048_576, $per);
     printf("at 500 hosts: %.1f GB per day; 90 days of detail ~ %.0f GB (before summaries, without the 2-year tables)\n", $per * 500 / 1024, $per * 500 * 90 / 1024);
+
+    // Servers and laptops apart (M-050): each table's size shared out by the
+    // rows each simulated host has in it; the kind comes from host_facts.
+    $kinds = [];
+    foreach ($pdo->query("SELECT a.id, MAX(f.os_product_name LIKE 'Windows Server%') AS srv FROM agents a JOIN host_facts f ON f.host_pk = a.host_pk WHERE a.id IN ($in) GROUP BY a.id") as $r) {
+        $kinds[(int) $r['id']] = (int) $r['srv'] === 1 ? 'server' : 'laptop';
+    }
+    $hostOf = $pdo->query("SELECT host_pk, id FROM agents WHERE id IN ($in)")->fetchAll(PDO::FETCH_KEY_PAIR);
+    $sizes = [];
+    $s->execute([$db]);
+    foreach ($s as $r) {
+        $sizes[$r['TABLE_NAME']] = (int) $r['bytes'];
+    }
+    $byKind = ['server' => 0.0, 'laptop' => 0.0];
+    foreach (TableMap::tables() as $t) {
+        $cols = TableMap::columns($t);
+        $col = isset($cols['agent_pk']) ? 'agent_pk' : (isset($cols['host_pk']) ? 'host_pk' : null);
+        if ($col === null || ($sizes[$t] ?? 0) === 0) {
+            continue;
+        }
+        $counts = $pdo->query("SELECT `$col`, COUNT(*) FROM `$t` GROUP BY `$col`")->fetchAll(PDO::FETCH_KEY_PAIR);
+        $all = array_sum($counts);
+        foreach ($counts as $k => $c) {
+            $agent = $col === 'agent_pk' ? (int) $k : (int) ($hostOf[$k] ?? 0);
+            if ($all > 0 && isset($kinds[$agent])) {
+                $byKind[$kinds[$agent]] += $sizes[$t] * $c / $all;
+            }
+        }
+    }
+    $n = array_count_values($kinds);
+    foreach ($byKind as $kind => $bytes) {
+        if (($n[$kind] ?? 0) > 0) {
+            printf("%s: %d hosts, %.1f MB per host per day (table sizes shared out by rows)\n", $kind, $n[$kind], $bytes / 1_048_576 / $n[$kind] / $days);
+        }
+    }
     echo "note: includes every table in the database, sizes are InnoDB page counts (estimates)\n";
     exit(0);
 }

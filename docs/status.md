@@ -143,7 +143,9 @@ Also on the VM in `/etc/aio-mothership/pki/public/fingerprints.txt`. If 07 ever 
 - Server times (`measure.php latency`, 02:07:43 to 03:07:43 UTC): 1,428 ingest batches, all 200, 31,844 rows stored (9 per s).
   - PHP to COMMIT: p50 9 ms, **p95 71 ms**, p99 127 ms, max 351 ms.
   - Apache, whole request including TLS and upload: p50 64 ms, **p95 128 ms**, p99 201 ms.
-- Simulator summary (client-side p95, the gate figure, M-049): pending.
+- Simulator (as the agents saw it, the gate figure, M-049): 1,668 requests (1,428 ingest, 240 heartbeats), all 200; 32,016 lines acknowledged; 0 unsent; 0 answer mismatches.
+  - Ingest: p50 68 ms, **p95 133 ms**, p99 205 ms, max 397 ms. Heartbeat: p50 40 ms, p95 91 ms.
+- **Gate (M-050): PASS.** p95 133 ms, under 500 ms, and 0 lost. MB per host per day: next, from a `--day` run.
 
 **Ingest benchmark (2026-11-19, `tools/bench-ingest.php 10`, no HTTP, `aio_test`):**
 
