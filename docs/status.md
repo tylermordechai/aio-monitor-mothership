@@ -147,6 +147,11 @@ Also on the VM in `/etc/aio-mothership/pki/public/fingerprints.txt`. If 07 ever 
   - Ingest: p50 68 ms, **p95 133 ms**, p99 205 ms, max 397 ms. Heartbeat: p50 40 ms, p95 91 ms.
 - **Gate (M-050): PASS.** p95 133 ms, under 500 ms, and 0 lost. MB per host per day: next, from a `--day` run.
 
+**Day run (2026-11-20, `--agents=4 --laptops=2 --day`, fresh agents):** 24 hours of records per agent, sent back to back.
+- 638 requests, all 200; **738,520 lines** (about 185,000 per host per day) in about 2 minutes, 6,192 lines per s; 16 MB compressed sent; 0 unsent; 0 mismatches.
+- Ingest p50 538 ms, p95 1,056 ms, max 2,012 ms. These are catch-up batches of about 1,160 lines each, like an agent emptying its buffer after an outage, not the 10 s batches the gate measures. 6,192 lines per s is about 140 times the 4 hosts' live rate.
+- Reconcile and size: pending.
+
 **Ingest benchmark (2026-11-19, `tools/bench-ingest.php 10`, no HTTP, `aio_test`):**
 
 | Phase (warm median, ms) | Inventory (193 lines, 15 tables) | Flows (24 lines) |
