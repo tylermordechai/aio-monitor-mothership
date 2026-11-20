@@ -154,6 +154,13 @@ Server: `innodb_flush_log_at_trx_commit = 1`, buffer pool 3,072 MB, binlog off.
 - **Random stalls** in every phase (auth 97 ms, flows db 64 ms) on an otherwise idle VM point at the host: either the disk or CPU contention on Unraid.
 - Next: measure the disk sync on its own (`tools/fsync-test.php`) and CPU steal (`vmstat`), then check the Unraid disk settings during the resize.
 
+**Disk check (2026-11-19):**
+- `/var/lib/mariadb` and the home directory are both on `/dev/vda2` (a VirtIO disk, 97 GB).
+- `fsync-test.php`, 200 syncs of 4 KB: **p50 17.2 ms, p95 45.7 ms, p99 64.3 ms, max 97.5 ms.** An SSD does this in under 1 ms.
+- `vmstat`: CPU 95 to 100 % idle, steal (`st`) 0, wait (`wa`) 0 to 5 %.
+
+**Finding:** the slow ingest commits come from the disk under the VM, not from the CPU or the code. The cause is on the Unraid side (where the vDisk is stored and its format); it'll be checked and fixed during the resize, before the gate.
+
 **Before the VM:** unit tests and `php -l` on the PC with a portable PHP 8.5.13 (`C:\dev\tools\php`, not in the repo). Nothing has run against MariaDB or Apache yet.
 
 **Found while building:**
