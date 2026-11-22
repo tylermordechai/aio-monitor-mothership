@@ -435,3 +435,27 @@ Proposed in [ingest-api.md](ingest-api.md) and `db/migrations/0001_initial.sql`,
 **Requirements:** CLAUDE.md milestones · **Status:** Accepted 2026-11-20 (owner)
 - Order from here: **milestone 5 (dashboard core)** on simulator data, then **milestone 3 (enrolment)**, then **milestone 4 (retention)**. Milestones 6 and 7 follow as before. The numbers stay, so requirement and decision references don't change.
 - Effects: the dashboard is built before enrolment, so agents are still the simulator's (`tools/dev-agents.php`); "silent agent flagged" (milestone 3's gate) can already show on the map. Retention and partition jobs come after the dashboard, so the 7 days of simulator data are kept by hand until milestone 4.
+
+### M-053 The analyst database user and the narrowed dashboard grants (M-041 details)
+**Requirements:** MS-SEC-04, MS-SEC-07, MS-SEC-08, MS-SEC-09 · **Status:** Accepted 2026-11-22 (owner, milestone 5 plan)
+- **`aio_analyst`:** SELECT on `process_command_lines` and INSERT on `audit_log`, nothing else. Credentials in `/etc/aio-mothership/db/analyst.cnf`, 640 root:aio-dashboard (the dashboard pool reads it).
+- **When it is used:** only after the server has checked the signed-in user is an analyst or admin. The command line is read and its `view_command_line` audit row written in one transaction on that connection, so no command line is shown without an audit row.
+- **`aio_dashboard`:** SELECT on every table except `process_command_lines`, granted per table by `setup/06-mariadb.sh` from the live schema (re-run 06 after a migration). Writes only `users` (INSERT, UPDATE) and `audit_log` (INSERT). The alert, enrolment and admin write grants that `grants.sql` had are removed until the milestones that build those pages (3, 6, 7) add them back.
+- 06 checks each of these, both ways (can and can't).
+
+### M-054 Dashboard core design (milestone 5)
+**Requirements:** MS-SEC-05..10, MS-UI-01, 02, 07, 08, 09, MS-DAT-04, 05 · **Status:** Accepted 2026-11-22 (owner, milestone 5 plan)
+- **Pages:** server-rendered PHP, one front controller (`public/dashboard/index.php`, Apache `FallbackResource`), templates in `templates/` outside the web root, every printed value through `View::e()`. JavaScript in files only.
+- **Headers (Apache):** CSP `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'`, no framing, no referrer, no caching, COOP and CORP same-origin.
+- **Sign-in:** local accounts, Argon2id (`password_hash`), at least 12 characters *(confirm)*, lockout after 5 failures for 15 minutes *(confirm)*, one message for every failure; an unknown user name is not stored in the audit log (it could be a mistyped password).
+- **Sessions:** PHP file sessions in `/var/lib/php/sessions-aio-dashboard` (700, dashboard pool only), cookie `__Host-aio` (Secure, HttpOnly, SameSite=Strict), new ID at sign-in and sign-out, 30 minutes idle and 12 hours in all *(confirm)*. The user is read from `users` on every request, so a role change, disable or lock applies at once.
+- **CSRF:** a per-session token on every form, plus Origin and Sec-Fetch-Site checks when the browser sends them.
+- **Roles:** viewer < analyst < admin; admin includes analyst, so it sees command lines; every view is still audited.
+- **Accounts:** `tools/users.php` only in milestone 5 (add, list, role, password, unlock, disable, enable), each change audited as `cli:<login>`. `unlock` clears a lockout, so the only admin is never locked out for long.
+- **Map:** Cytoscape.js **3.34.4** (MIT, The Cytoscape Consortium), vendored at `public/dashboard/assets/vendor/cytoscape-3.34.4/` with its LICENSE, served from the VM, no CDN.
+  - `cytoscape.min.js` SHA-256 `081591ab735b2b6a3b31a3c60f8f3a3e2fee8c92939e0c7820ad1208571b6cd8` (435,649 bytes); `LICENSE` SHA-256 `eb319c6e6f233607f71e8e2f450391751883cfc0eeb3ca7ef574c13d1d9c2203`.
+  - From the npm tarball `cytoscape-3.34.4.tgz`, integrity `sha512-msY99tMY8iWTg+sIPGfSqDcPNOt4xcj+v/K/7qUFaCUxxlqnMkUYLBjRUzn9W5CU/R2hrmtJa5+UtovrEM2ctg==` (checked on download). `setup/10-dashboard.sh` checks the SHA-256 on the VM.
+  - Cytoscape inserts an inline `<style>` unless an element with id `__________cytoscape_stylesheet` exists; the page's stylesheet link has that id, so the CSP stays strict.
+- **Map content:** each host an icon (name, version, last check-in; amber when stale, no check-in for 5 minutes *(confirm)*); lines to other monitored hosts (matched by their IP addresses); the 15 busiest unmonitored internal addresses as their own nodes and the rest as one "other internal" node; every outside address as one "internet" cloud. Internal means the ranges in `dashboard.internal_networks` (RFC 1918, CGNAT, link-local, IPv6 ULA and link-local). Alerts show as "not built yet (milestone 7)".
+- **Connections data:** `flow_conn_hourly` (migration 0003) holds one row per connection (D-016 key) per hour, filled every minute by a systemd timer as `aio_maint`, from batches at least 90 s old. The map and connections tab read it; the page says how far it reaches (normally 1 to 3 minutes behind). This replaces "the latest hour read from the flow records" in the plan: it keeps pages fast and the lag is shown.
+- **Simulator:** the simulated hosts talk to each other (laptops to servers on 443, 445 and 1433; servers record the inbound side), to an unmonitored domain controller, file and update server, to printers and devices, and to internet addresses. `--days=N` replaces `--day`.

@@ -1,11 +1,11 @@
 # Pending decisions
 
-Last updated: 2026-11-20 (MPD-37 kept open with pilot capacity, M-051)
+Last updated: 2026-11-22 (MPD-38 added)
 
 Every *(confirm)* value and open question still open, each with a recommendation. To answer, reply with the ID and your choice, for example "MPD-32: keep". Answers are recorded in [decisions.md](decisions.md) and removed from here.
 
 - **Answered:** MPD-01 to MPD-34, recorded as M-017 to M-041; MPD-36, recorded as M-050.
-- **Open:** MPD-35 (the default is in the code) and MPD-37 (before milestone 4).
+- **Open:** MPD-35 (the default is in the code), MPD-37 (later) and MPD-38 (before the pilot).
 
 ### MPD-35 How much one simulated server produces
 - **Context:** MS-DAT-06 (MB per host per day) and the load test depend on the simulator's volume per host (`src/Sim/Profile.php`, M-049). The defaults are estimates.
@@ -21,6 +21,11 @@ Every *(confirm)* value and open question still open, each with a recommendation
   3. **Compress `net_flows`** (InnoDB compression, a migration): often about half the size, for some CPU. Tested on simulator data before deciding.
   4. **Slim the `net_flows` row:** review its columns and indexes for repeated strings (process path, addresses) that could be stored once.
 - **Recommendation:** 1 in any case; 3 and 4 tried in milestone 4 on simulator data, with the figures reported; 2 decided after that, with the real agent's numbers. Not needed for the development VM: 4 hosts fit.
+
+### MPD-38 Two-step sign-in (TOTP) before the pilot
+- **Context:** MS-SEC-06 asks for an optional TOTP second factor. The owner left it out of milestone 5 (2026-11-22); `users.totp_secret_enc` and `totp_enabled` are already in the schema.
+- **Proposal:** RFC 6238 codes (30 s, 6 digits, SHA-1, one step either side), the secret encrypted with an app key kept in `/etc/aio-mothership/`, set up by `tools/users.php totp <name>` showing the secret as text for the authenticator app (no QR library), and required for admins.
+- **Recommendation:** build it before the pilot, when real hosts and command lines are on the dashboard.
 
 ### Deferred with the backups (M-026)
 - **Unraid:** free disk on the cache pool, and where the off-box backup copy goes. Settled with the "before ready to ship" backup work.

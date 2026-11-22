@@ -4,7 +4,8 @@
  * Dashboard health page (443), milestone 1 setup only (M-038).
  *
  * Shows that Apache, TLS, the web CA certificate and PHP-FPM work.
- * It reads no database and no secret. Replaced by the dashboard in milestone 5.
+ * It reads no database and no secret. Kept beside the dashboard (milestone 5)
+ * as the plain health check that setup/08 and 10 use; it needs no sign-in.
  *
  * reboot_required: Ubuntu's flag file after an update that needs a reboot;
  * nothing reboots on its own (M-039, MS-OPS-05).

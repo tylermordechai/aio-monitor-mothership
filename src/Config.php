@@ -20,6 +20,9 @@ final class Config
         'db' => [
             'ingest_cnf' => '/etc/aio-mothership/db/ingest.cnf',
             'maint_cnf' => '/etc/aio-mothership/db/maint.cnf',
+            'dashboard_cnf' => '/etc/aio-mothership/db/dashboard.cnf',
+            // M-053: the only user that can read process_command_lines.
+            'analyst_cnf' => '/etc/aio-mothership/db/analyst.cnf',
             'name' => 'aio',
         ],
         'ingest' => [
@@ -48,6 +51,20 @@ final class Config
             'rows_per_insert' => 500,
             // Log the phase timings of an ingest request that takes this long (0: off).
             'slow_log_ms' => 0,
+        ],
+        // Milestone 5 (M-054). Values marked (confirm) are the owner's accepted
+        // defaults (2026-11-22), kept here so they can change without code.
+        'dashboard' => [
+            'password_min_length' => 12,     // (confirm) MS-SEC-06
+            'lockout_failures' => 5,         // (confirm) MS-SEC-06
+            'lockout_minutes' => 15,         // (confirm) MS-SEC-06
+            'session_idle_s' => 1800,        // (confirm) 30 min
+            'session_max_s' => 43_200,       // (confirm) 12 h
+            'stale_after_s' => 300,          // (confirm) MS-ALR-05: no check-in for 5 minutes
+            'map_internal_nodes' => 15,      // busiest unmonitored internal addresses shown on their own
+            // Address ranges counted as internal; the rest is "internet".
+            'internal_networks' => '10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,100.64.0.0/10,169.254.0.0/16,fc00::/7,fe80::/10',
+            'slow_log_ms' => 0,              // log pages slower than this (0: off)
         ],
         'heartbeat' => [
             'interval_s' => 60,

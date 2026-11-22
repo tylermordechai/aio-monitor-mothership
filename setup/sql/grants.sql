@@ -1,4 +1,4 @@
--- setup/sql/grants.sql: privileges for the three application users (MS-SEC-04,
+-- setup/sql/grants.sql: privileges for the four application users (MS-SEC-04,
 -- M-036). Applied by setup/06-mariadb.sh after the migrations, as root over the
 -- local socket. No passwords here: the script creates the users first.
 -- Safe to re-run: every user's privileges are revoked and granted again, so
@@ -7,6 +7,7 @@
 REVOKE ALL PRIVILEGES, GRANT OPTION FROM 'aio_ingest'@'localhost';
 REVOKE ALL PRIVILEGES, GRANT OPTION FROM 'aio_dashboard'@'localhost';
 REVOKE ALL PRIVILEGES, GRANT OPTION FROM 'aio_maint'@'localhost';
+REVOKE ALL PRIVILEGES, GRANT OPTION FROM 'aio_analyst'@'localhost';
 
 -- ---------------------------------------------------------------------------
 -- aio_ingest: the agent API on 8443 (ingest, heartbeat, config, enrol, renew).
@@ -59,26 +60,25 @@ GRANT SELECT ON aio.agent_config       TO 'aio_ingest'@'localhost';
 GRANT SELECT ON aio.retention_policies TO 'aio_ingest'@'localhost';
 
 -- ---------------------------------------------------------------------------
--- aio_dashboard: the dashboard on 443. Reads everything (roles and the
--- command-line audit are enforced in the app, MS-SEC-07/08, MPD-34); writes
--- only its own user, alert, audit and admin tables. Audit rows: insert only.
+-- aio_dashboard: the dashboard on 443 (M-053, M-054).
+-- Reads every table except process_command_lines: those SELECT grants are
+-- made per table by setup/06-mariadb.sh from the live schema, right after
+-- this file, so new tables are covered when 06 is re-run after a migration.
+-- Writes only users (sign-in counters, tools/users.php) and audit_log
+-- (insert only, MS-SEC-08). The alert and admin pages get their own write
+-- grants in the milestones that build them (3, 6, 7).
 -- ---------------------------------------------------------------------------
-GRANT SELECT ON aio.* TO 'aio_dashboard'@'localhost';
-GRANT INSERT, UPDATE         ON aio.users                     TO 'aio_dashboard'@'localhost';
-GRANT INSERT                 ON aio.audit_log                 TO 'aio_dashboard'@'localhost';
-GRANT INSERT, UPDATE         ON aio.alert_rules               TO 'aio_dashboard'@'localhost';
-GRANT INSERT, UPDATE, DELETE ON aio.alert_rule_group_settings TO 'aio_dashboard'@'localhost';
-GRANT INSERT, UPDATE, DELETE ON aio.alert_allowlist           TO 'aio_dashboard'@'localhost';
-GRANT UPDATE                 ON aio.alerts                    TO 'aio_dashboard'@'localhost';
--- Admin pages: groups, agent config, tokens, revocation, retention, lists.
-GRANT INSERT, UPDATE ON aio.host_groups       TO 'aio_dashboard'@'localhost';
-GRANT INSERT, UPDATE ON aio.agent_config      TO 'aio_dashboard'@'localhost';
-GRANT INSERT, UPDATE ON aio.enrollment_tokens TO 'aio_dashboard'@'localhost';
-GRANT UPDATE ON aio.hosts              TO 'aio_dashboard'@'localhost';
-GRANT UPDATE ON aio.agents             TO 'aio_dashboard'@'localhost';
-GRANT UPDATE ON aio.agent_certificates TO 'aio_dashboard'@'localhost';
-GRANT UPDATE ON aio.retention_policies TO 'aio_dashboard'@'localhost';
-GRANT UPDATE ON aio.threat_lists       TO 'aio_dashboard'@'localhost';
+GRANT INSERT, UPDATE ON aio.users     TO 'aio_dashboard'@'localhost';
+GRANT INSERT         ON aio.audit_log TO 'aio_dashboard'@'localhost';
+
+-- ---------------------------------------------------------------------------
+-- aio_analyst: the only user that can read command lines (M-041, M-053).
+-- The dashboard connects as it only after checking the signed-in user is an
+-- analyst or admin, and writes the audit row in the same transaction as the
+-- read (MS-SEC-07..09). Nothing else.
+-- ---------------------------------------------------------------------------
+GRANT SELECT ON aio.process_command_lines TO 'aio_analyst'@'localhost';
+GRANT INSERT ON aio.audit_log             TO 'aio_analyst'@'localhost';
 
 -- ---------------------------------------------------------------------------
 -- aio_maint: background jobs from systemd timers (partitions, retention,
