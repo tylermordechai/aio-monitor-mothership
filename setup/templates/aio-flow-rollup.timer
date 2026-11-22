@@ -1,0 +1,11 @@
+# Managed by aio-mothership setup/10-dashboard.sh (M-054). Do not edit here.
+[Unit]
+Description=All In 1 Monitor: connections per hour, every minute (M-054)
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=1min
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target

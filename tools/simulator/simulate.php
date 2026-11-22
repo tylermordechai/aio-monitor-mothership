@@ -9,7 +9,7 @@
  *
  *   sudo php tools/simulator/simulate.php --agents=10 --duration=120
  *   sudo php tools/simulator/simulate.php --agents=4 --laptops=2 --duration=3600 --faults   # the gate run (M-050)
- *   sudo php tools/simulator/simulate.php --agents=20 --day                       # 24 h of data, fast (MS-DAT-06)
+ *   sudo php tools/simulator/simulate.php --agents=4 --laptops=2 --days=7          # 7 days of data, fast (MS-DAT-06, milestone 5 gate)
  *
  * Options:
  *   --agents=N        how many of the created agents to run (default: all)
@@ -17,7 +17,7 @@
  *   --interval=S      batch interval (default 10, AG-DAT-03)
  *   --heartbeat=S     heartbeat interval (default 60, M-030)
  *   --faults          now and then: resend a batch, add a bad or unknown line
- *   --day             make 24 hours of records per agent (timestamps in the past) and send them back to back
+ *   --days=N          make N days of records per agent (timestamps in the past) and send them back to back; --day is --days=1
  *   --concurrency=N   requests in flight at most (default 64)
  *   --laptops=N       the last N of those agents act as Windows 11 laptops (Profile::LAPTOP), the rest as servers (default 0)
  *   --profile=JSON    override Aio\Sim\Profile values for all of them, e.g. '{"flows_per_window":40}'
@@ -30,13 +30,14 @@ declare(strict_types=1);
 
 require dirname(__DIR__, 2) . '/vendor/autoload.php';
 
+use Aio\Sim\Network;
 use Aio\Sim\Profile;
 use Aio\Sim\SimAgent;
 use Aio\Util\Uuid;
 
 const SIM_DIR = '/var/lib/aio-mothership/sim';
 
-$o = getopt('', ['agents:', 'duration:', 'interval:', 'heartbeat:', 'faults', 'day', 'concurrency:', 'profile:', 'laptops:', 'url:', 'ca:']);
+$o = getopt('', ['agents:', 'duration:', 'interval:', 'heartbeat:', 'faults', 'day', 'days:', 'concurrency:', 'profile:', 'laptops:', 'url:', 'ca:']);
 $ip = trim((string) shell_exec('. ' . escapeshellarg(dirname(__DIR__, 2) . '/setup/env.sh') . ' && echo $AIO_IP'));
 $url = (string) ($o['url'] ?? "https://$ip:8443");
 $ca = (string) ($o['ca'] ?? '/etc/aio-mothership/pki/public/agent-ca.crt');
@@ -44,7 +45,8 @@ $interval = (int) ($o['interval'] ?? 10);
 $hbEvery = (int) ($o['heartbeat'] ?? 60);
 $duration = (int) ($o['duration'] ?? 60);
 $faults = isset($o['faults']);
-$dayMode = isset($o['day']);
+$days = isset($o['days']) ? max(1, (int) $o['days']) : (isset($o['day']) ? 1 : 0);
+$dayMode = $days > 0;
 $maxConc = (int) ($o['concurrency'] ?? 64);
 $over = isset($o['profile']) ? (array) json_decode((string) $o['profile'], true) : [];
 $profile = Profile::with($over);
@@ -61,15 +63,26 @@ $runDir = SIM_DIR . '/runs/' . gmdate('Ymd\THis\Z');
 mkdir($runDir, 0700, true);
 
 $t0 = microtime(true);
-$simStart = $dayMode ? $t0 - 86_400 : $t0;
+$simStart = $dayMode ? $t0 - 86_400 * $days : $t0;
 /** @var array<string, SimAgent> $agents */
 $agents = [];
 $laptops = min(count($ids), max(0, (int) ($o['laptops'] ?? 0)));
+// Who is a server and who a laptop, so the hosts talk to each other (M-054).
+$serverNos = [];
+$laptopNos = [];
+foreach ($ids as $i => $id) {
+    if ($i >= count($ids) - $laptops) {
+        $laptopNos[] = (int) $id['n'];
+    } else {
+        $serverNos[] = (int) $id['n'];
+    }
+}
+$network = new Network($serverNos, $laptopNos);
 foreach ($ids as $i => $id) {
     $isLaptop = $i >= count($ids) - $laptops;
     $statePath = SIM_DIR . "/state/{$id['agent_id']}.json";
     $state = is_file($statePath) ? (array) json_decode((string) file_get_contents($statePath), true) : [];
-    $agents[$id['agent_id']] = new SimAgent($id, $isLaptop ? $laptopProfile : $profile, $state, $simStart, $interval, $hbEvery, $faults);
+    $agents[$id['agent_id']] = new SimAgent($id, $isLaptop ? $laptopProfile : $profile, $state, $simStart, $interval, $hbEvery, $faults, $network);
 }
 $saveStates = static function () use (&$agents): void {
     foreach ($agents as $a) {
@@ -114,7 +127,7 @@ $drainDeadline = null;
 $nextReport = $t0 + 10;
 $nextSave = $t0 + 60;
 $dayCursor = $simStart;
-fprintf(STDOUT, "%s: %d agents (%d laptops), %s, faults %s, target %s\n", gmdate('H:i:s'), count($agents), $laptops, $dayMode ? '24 h of data back to back' : "live for {$duration}s", $faults ? 'on' : 'off', $url);
+fprintf(STDOUT, "%s: %d agents (%d laptops), %s, faults %s, target %s\n", gmdate('H:i:s'), count($agents), $laptops, $dayMode ? "$days day(s) of data back to back" : "live for {$duration}s", $faults ? 'on' : 'off', $url);
 
 while (true) {
     $now = microtime(true);
@@ -239,7 +252,8 @@ $saveStates();
 
 $t1 = microtime(true);
 $summary = [
-    'mode' => $dayMode ? 'day' : 'live',
+    'mode' => $dayMode ? 'days' : 'live',
+    'days' => $days,
     'started' => gmdate('c', (int) $t0),
     'ended' => gmdate('c', (int) $t1),
     'seconds' => round($t1 - $t0, 1),

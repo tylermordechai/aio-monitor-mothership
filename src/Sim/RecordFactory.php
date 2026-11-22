@@ -27,6 +27,7 @@ final class RecordFactory
     ];
 
     private int $seq;
+    private readonly Network $net;
     /** @var list<array{pid: int, exe: array{0:string,1:string,2:string,3:list<string>}, start: string}> */
     private array $procs = [];
 
@@ -37,9 +38,13 @@ final class RecordFactory
         int $startSeq = 1,
         public readonly string $agentVersion = '0.5.0',
         private readonly int $hostNo = 1,
+        ?Network $net = null,
+        private readonly bool $server = true,
     ) {
         $this->seq = $startSeq;
-        $boot = gmdate('Y-m-d\TH:i:s', time() - 86_400 * 3) . '.1000000Z';
+        $this->net = $net ?? ($server ? new Network([$hostNo], []) : new Network([], [$hostNo]));
+        // Booted before the longest simulated history (--days=7, M-054).
+        $boot = gmdate('Y-m-d\TH:i:s', time() - 86_400 * 10) . '.1000000Z';
         foreach (self::EXES as $i => $e) {
             $this->procs[] = ['pid' => 600 + $i * 412 + ($hostNo % 97), 'exe' => $e, 'start' => $boot];
         }
@@ -96,7 +101,7 @@ final class RecordFactory
 
     private function localIp(): string
     {
-        return '10.20.' . intdiv($this->hostNo, 250) % 250 . '.' . ($this->hostNo % 250 + 2);
+        return Network::ipOf($this->hostNo);
     }
 
     /**
@@ -115,15 +120,21 @@ final class RecordFactory
             $out[] = $this->envelope('udp_endpoint', ['family' => 'ipv4', 'local_addr' => '0.0.0.0', 'local_port' => [123, 137, 138, 500, 4500, 5353][$i % 6]] + $this->proc($i + 2), $ts);
         }
         for ($i = 0; $i < $conns; $i++) {
-            $inbound = $i % 4 === 0;
+            // The TCP slots of the simulated network (M-054), so the live view
+            // matches the flows.
+            $p = $this->net->slot($this->hostNo, $this->server, $i);
+            if ($p['proto'] !== 'tcp') {
+                $p = ['proto' => 'tcp', 'local_port' => 49_700 + $i, 'remote_addr' => Network::DC, 'remote_port' => 389, 'direction' => 'outbound'];
+            }
+            $inbound = $p['direction'] === 'inbound';
             $out[] = $this->envelope('tcp_conn', [
                 'family' => 'ipv4',
                 'local_addr' => $this->localIp(),
-                'local_port' => $inbound ? 443 : 49_700 + $i,
-                'remote_addr' => $i % 3 === 0 ? '203.0.113.' . (10 + $i % 200) : '10.20.0.' . (1 + $i % 50),
-                'remote_port' => $inbound ? 50_000 + $i : [443, 445, 1433, 389, 88][$i % 5],
+                'local_port' => $inbound ? $p['local_port'] : 49_700 + $i,
+                'remote_addr' => $p['remote_addr'],
+                'remote_port' => $p['remote_port'],
                 'state' => 'established',
-                'direction' => $inbound ? 'inbound' : 'outbound',
+                'direction' => $p['direction'],
                 'direction_source' => 'heuristic',
                 'listener_pid_match' => $inbound,
             ] + $this->proc($i), $ts);
@@ -140,14 +151,15 @@ final class RecordFactory
     {
         $out = [];
         for ($i = 0; $i < $n; $i++) {
+            $p = $this->net->slot($this->hostNo, $this->server, $i);
             $out[] = $this->envelope('net_flow', [
-                'proto' => $i % 5 === 0 ? 'udp' : 'tcp',
+                'proto' => $p['proto'],
                 'family' => 'ipv4',
                 'local_addr' => $this->localIp(),
-                'local_port' => 49_800 + $i,
-                'remote_addr' => $i % 2 === 0 ? '203.0.113.' . (20 + $i) : '10.20.0.' . (5 + $i),
-                'remote_port' => [443, 53, 445, 80, 1433][$i % 5],
-                'direction' => 'outbound',
+                'local_port' => $p['local_port'],
+                'remote_addr' => $p['remote_addr'],
+                'remote_port' => $p['remote_port'],
+                'direction' => $p['direction'],
                 'direction_source' => 'etw',
                 'first_seen' => self::ts($windowEnd - 10 - ($i % 3) * 10),
                 'last_seen' => self::ts($windowEnd - 1),

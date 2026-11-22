@@ -61,8 +61,9 @@ final class SimAgent
         private readonly int $batchIntervalS,
         private readonly int $heartbeatS,
         private readonly bool $faults,
+        ?Network $net = null,
     ) {
-        $this->factory = new RecordFactory($id['agent_id'], $id['host_id'], $id['hostname'], (int) ($state['next_seq'] ?? 1), '0.5.0-sim', $id['n']);
+        $this->factory = new RecordFactory($id['agent_id'], $id['host_id'], $id['hostname'], (int) ($state['next_seq'] ?? 1), '0.5.0-sim', $id['n'], $net, (bool) ($profile['server'] ?? 1));
         $this->exeCounter = (int) ($state['exe_counter'] ?? 0);
         $this->expectRows = $state['expect_rows'] ?? [];
         $this->ackedLines = (int) ($state['acked_lines'] ?? 0);

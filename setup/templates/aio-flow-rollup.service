@@ -1,0 +1,29 @@
+# Managed by aio-mothership setup/10-dashboard.sh (M-054). Do not edit here.
+# Connections per hour for the dashboard: net_flows -> flow_conn_hourly.
+# Runs as root only to read /etc/aio-mothership/db/maint.cnf (600 root,
+# M-047); it has no capabilities and a read-only view of the system.
+[Unit]
+Description=All In 1 Monitor: connections per hour for the dashboard (M-054)
+After=mariadb.service
+Requires=mariadb.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/php @AIO_REPO@/tools/jobs/flow-rollup.php
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=no
+TimeoutStartSec=15min
