@@ -248,17 +248,45 @@ sudo php tools/dev-agents.php delete                         # removes every sim
 ```
 
 - **Simulated agents** are in host group `simulator`, with certificates from the agent CA (M-049). `delete` removes only them.
-- **`--day`** makes 24 hours of records per agent with past timestamps and sends them as fast as the server takes them. Use it with a few agents (`--agents=20 --day`) for the size figure.
+- **`--days=N`** (or `--day` for one) makes N days of records per agent with past timestamps and sends them as fast as the server takes them. Use it with a few agents (`--agents=4 --laptops=2 --day`) for the size figure.
 - **The gate run** (M-050): `--agents=4 --laptops=2 --duration=3600 --faults`, 2 servers and 2 laptops. `--laptops=N` makes the last N agents Windows 11 laptops. The simulator prints progress every 10 s and a summary at the end, written to `/var/lib/aio-mothership/sim/runs/<time>/summary.json`.
+
+## Step 10: the dashboard (`10-dashboard.sh`, milestone 5)
+
+After the `git pull`, re-run 06, 08 and 09 first (migration 0003, the analyst user and the new grants; the dashboard vhost; the tests), then 10:
+
+```bash
+sudo bash setup/10-dashboard.sh 2>&1 | tee ~/setup-logs/10.log
+sudo php tools/users.php add <your-name> --role=admin --display="Your Name"   # once; the password is asked twice, hidden
+```
+
+- **10 installs** the `aio-flow-rollup` timer, which every minute turns new flow records into connections per hour (`flow_conn_hourly`, M-054).
+- **Its checks:** the dashboard pool can read `dashboard.cnf` and `analyst.cnf` and nothing else; the sessions directory; the Cytoscape.js file's SHA-256; and, over HTTPS, the sign-in page, the redirects when signed out, a sign-in without the CSRF token refused, the cookie flags and the security headers.
+- **Accounts** (`tools/users.php`, MS-SEC-06..08): `add`, `list`, `role`, `password`, `unlock` (clears a lockout), `disable`, `enable`. Every change is in `audit_log`.
+- **Sign in:** `https://192.168.0.191/` in the browser on the PC (the web CA is already trusted).
+
+## Milestone 5: 7 days of simulator data
+
+```bash
+sudo php tools/dev-agents.php delete                       # start clean
+sudo php tools/dev-agents.php create 4
+sudo php tools/simulator/simulate.php --agents=4 --laptops=2 --days=7    # about 15 to 20 minutes
+sudo php tools/jobs/flow-rollup.php --all                  # catch the hourly table up now, not over the next hour
+```
+
+- **`--days=N`** makes N days of records per agent with past timestamps (`--day` is `--days=1`). The simulated hosts talk to each other, to an unmonitored domain controller, file and update server, to printers and to the internet (M-054).
+- Then live data on top, so the agents are checking in: `--agents=4 --laptops=2 --duration=3600` in tmux.
 
 ## What ends up where on the VM
 
 | Path | What | Who can read it |
 | --- | --- | --- |
 | `/opt/aio-mothership` | This repo (read-only clone) | everyone |
-| `/etc/aio-mothership/db/{ingest,dashboard,maint}.cnf` | Database credentials | `maint`: root only (600). `ingest`, `dashboard`: root and that PHP pool's group (640, M-047). The directory is 711 |
+| `/etc/aio-mothership/db/{ingest,dashboard,analyst,maint}.cnf` | Database credentials | `maint`: root only (600). `ingest`, `dashboard`: root and that PHP pool's group (640, M-047). `analyst`: root and the dashboard pool (640, M-053). The directory is 711 |
 | `/etc/aio-mothership/db/test.cnf` | `aio_test` credentials (integration tests, no real data) | root and `aioadmin` (640) |
 | `/etc/aio-mothership/app.ini` | App settings (limits, back-pressure), no secrets | everyone |
+| `/var/lib/php/sessions-aio-dashboard/` | Dashboard sessions (user ID and CSRF token, no password) | `aio-dashboard` (700) |
+| `/etc/systemd/system/aio-flow-rollup.{service,timer}` | Connections-per-hour job, every minute (M-054) | from `setup/templates` |
 | `/run/aio-ingest/` | Ingest slot and rate lock files (tmpfs) | `aio-ingest` (700) |
 | `/var/lib/aio-mothership/sim/` | Simulated agents' keys, state and run summaries (test only) | root (700) |
 | `/etc/aio-mothership/pki/agent-ca/ca.key` | Agent CA key | root and group `aio-signer` (440) |
