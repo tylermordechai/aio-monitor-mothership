@@ -1,8 +1,8 @@
 # Project status
 
-Last updated: 2026-11-20
+Last updated: 2026-11-22
 
-Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md); decisions are in [decisions.md](decisions.md) (M-001 to M-052); open items are in [pending-decisions.md](pending-decisions.md) (MPD-35, MPD-37); working rules are in [../CLAUDE.md](../CLAUDE.md).
+Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md); decisions are in [decisions.md](decisions.md) (M-001 to M-054); open items are in [pending-decisions.md](pending-decisions.md) (MPD-35, MPD-37, MPD-38); working rules are in [../CLAUDE.md](../CLAUDE.md).
 
 ## Pick up here
 
@@ -11,7 +11,8 @@ Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md
 - **The ingest contract (v1) is approved** (M-017). Agent 5c can build against it; the collector address is 192.168.0.191.
 - **The schema is approved** (2026-11-18): `06-mariadb.sh` printed `SCHEMA GATE: PASS` on MariaDB 11.8.6 from Ubuntu (M-017).
 - **The server is set up:** all of `setup/01` to `08` passed on the VM (Ubuntu Server 26.04.1 LTS, 192.168.0.191), run by the owner over SSH. The web CA is trusted on the owner's PC (thumbprint matched), and `https://192.168.0.191/health.php` loads with no certificate warning. Snapshot `M1-done` taken.
-- **Open decisions:** MPD-35 (simulator volume) and MPD-37 (disk and retention for 111 MB per host per day).
+- **Milestone 5 (dashboard core) is being built** (M-052, M-053, M-054). Steps 1 to 3 (sign-in, the hourly connections table, the server map) are pushed; the owner deploys them and has a first look before step 4 (host page).
+- **Open decisions:** MPD-35 (simulator volume), MPD-37 (disk and retention, pilot capacity), MPD-38 (TOTP, before the pilot).
 
 ## Summary
 
@@ -21,7 +22,7 @@ Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md
 | 2 | Ingest, simulator, load test | **Signed off** (2026-11-20, M-051). Gate passed: p95 133 ms, 0 lost, 111.3 MB per host per day |
 | 3 | Enrolment | Not started |
 | 4 | Retention (backups moved to "before ready to ship", M-026) | Not started |
-| 5 | Dashboard core | Not started |
+| 5 | Dashboard core | Building (next, M-052): steps 1 to 3 of 5 pushed |
 | 6 | Dashboard full, enrichment | Not started |
 | 7 | Alerts and pilot | Not started |
 
@@ -197,6 +198,20 @@ Server: `innodb_flush_log_at_trx_commit = 1`, buffer pool 3,072 MB, binlog off.
 - **Rollback records could be dropped:** 0001 keyed `agent_lifecycle` and `inventory_link_index` on `(agent, seq)`, which would have treated a rolled-back `agent_start` as a resend. Fixed by migration 0002 (M-046).
 - **§3.4 rule order:** checking "unknown type" before "provisional" would make the provisional list useless. Provisional is checked first (M-045). The contract text is unchanged; the intent is the same.
 
+## Milestone 5: dashboard core (building, from 2026-11-22)
+
+Plan approved 2026-11-22 with the owner's answers (M-053, M-054): Cytoscape.js for the map, admin includes analyst, no TOTP in this milestone (MPD-38, before the pilot), defaults 12 characters / 30 min idle / 12 h / stale after 5 min, `tools/users.php unlock`, 15 internal nodes plus "other internal".
+
+| Step | What | Files | Requirements | State |
+| --- | --- | --- | --- | --- |
+| 1 | Sign-in, sessions, CSRF, roles, audit, accounts; analyst DB user, narrowed dashboard grants | `src/Web/*`, `public/dashboard/index.php`, `templates/`, `tools/users.php`, `setup/sql/grants.sql`, `setup/06-mariadb.sh`, vhost and pool templates | MS-SEC-04..08, 10 | Built, unit tests pass on the PC; waiting for the VM |
+| 2 | Connections per hour (migration 0003) and its timer; simulated hosts talk to each other; `--days=N` | `db/migrations/0003_flow_conn_hourly.sql`, `src/Jobs/FlowRollup.php`, `tools/jobs/flow-rollup.php`, `src/Sim/Network.php` | MS-DAT-04, MS-UI-08 | Built; waiting for the VM |
+| 3 | Server map and fleet table; `setup/10-dashboard.sh` | `src/Dashboard/*`, `templates/home.php`, `public/dashboard/assets/` | MS-UI-01, 07 | Built; waiting for the owner's first look |
+| 4 | Host page: connections, listening ports, processes (command lines for analysts, audited), executables, inventory, server software; gaps on every view | | MS-UI-02, 07, MS-SEC-07..09, MS-DAT-04, 05 | After the owner's look at step 3 |
+| 5 | Page timing (`tools/page-times.php`) and the gate run | | MS-UI-08 (M-050) | |
+
+- Unit tests on the PC: 78 pass. New integration tests (sign-in and lockout, the hourly table, the map) run on the VM in `09`.
+
 ## Milestone 2 report (2026-11-20)
 
 **What was built:** the agent ingest API on 8443 (mTLS identity, validation, dedup, quarantine, one transaction per batch, acknowledgement after commit, back-pressure, heartbeat), migration 0002, the app setup script 09, and the simulator with reconcile, measure, bench and fsync tools. Table above; decisions M-043 to M-050.
@@ -273,6 +288,7 @@ Server: `innodb_flush_log_at_trx_commit = 1`, buffer pool 3,072 MB, binlog off.
 ## Before the pilot (M-031)
 
 - An encrypted copy of the two CA keys and `/etc/aio-mothership/` (app config), kept off the VM (MS-OPS-02).
+- Two-step sign-in (TOTP) for the dashboard (MPD-38).
 
 ## Before ready to ship (M-026)
 
