@@ -277,6 +277,16 @@ sudo php tools/jobs/flow-rollup.php --all                  # catch the hourly ta
 - **`--days=N`** makes N days of records per agent with past timestamps (`--day` is `--days=1`). The simulated hosts talk to each other, to an unmonitored domain controller, file and update server, to printers and to the internet (M-054).
 - Then live data on top, so the agents are checking in: `--agents=4 --laptops=2 --duration=3600` in tmux.
 
+### The gate: page times (MS-UI-08, M-050)
+
+```bash
+sudo php tools/page-times.php <your user name>              # asks for your dashboard password, hidden
+sudo php tools/page-times.php <your user name> --runs=5     # more runs per page
+```
+
+- Signs in over HTTPS like a browser and loads the home page and `/api/map` for each range, and every host's tabs (the time-based tabs for each range), `--runs` times each (default 3). Then signs out; both are in the audit log.
+- Prints, per kind of page, the median and slowest whole request (as curl saw it: TLS, Apache, PHP, database) and the server's own time (`X-Render-Ms`), then `GATE … PASS` when every page answered 200 in under 5 s. The command-line reveal is not timed (each one writes an audit row).
+
 ## What ends up where on the VM
 
 | Path | What | Who can read it |
