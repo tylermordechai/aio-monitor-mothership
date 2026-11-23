@@ -14,7 +14,7 @@ Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md
 - **Milestone 5 (dashboard core): signed off** (2026-11-23, M-058): every page under 5 s at 2 servers and 2 laptops with 7.9 days of data (slowest 416 ms). Report below.
 - **Next: milestone 3 (enrolment)**, then 4 (retention) (M-052): plan first, for the owner's OK.
 - **VM snapshots: removed** (2026-11-23): the VM runs from one raw disk, `vdisk1-flat.img`, checked identical to the chain. The old files stay in `old-chain/` for a few days (details in the milestone 2 section).
-- **Milestone 3 plan** given to the owner (2026-11-23); waiting for the owner's OK before any code.
+- **Milestone 3 (enrolment): started** (2026-11-23, M-059). Step 1, the signing service (M-060), is built and waits for `setup/11-enrolment.sh` on the VM. Open points MPD-40 to MPD-43.
 - **Open decisions:** MPD-35 (simulator volume), MPD-37 (disk and retention, pilot capacity), MPD-38 (TOTP, before the pilot), MPD-39 (agent milestone 5d record types).
 
 ## Summary
@@ -23,7 +23,7 @@ Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md
 | --- | --- | --- |
 | 1 | Server and contract | **Signed off** (2026-11-19). Done 2026-11-18. Contract approved (2026-11-13, M-017); schema approved (2026-11-18, schema gate passed); all 8 setup scripts passed on the VM; dashboard health page loads in the browser with the web CA |
 | 2 | Ingest, simulator, load test | **Signed off** (2026-11-20, M-051). Gate passed: p95 133 ms, 0 lost, 111.3 MB per host per day |
-| 3 | Enrolment | Not started |
+| 3 | Enrolment | **Started** 2026-11-23 (M-059): step 1, the signing service, built |
 | 4 | Retention (backups moved to "before ready to ship", M-026) | Not started |
 | 5 | Dashboard core | **Signed off** 2026-11-23 (M-058); gate passed, slowest page 416 ms |
 | 6 | Dashboard full, enrichment | Not started |
@@ -209,6 +209,23 @@ Server: `innodb_flush_log_at_trx_commit = 1`, buffer pool 3,072 MB, binlog off.
 - **Rollback records could be dropped:** 0001 keyed `agent_lifecycle` and `inventory_link_index` on `(agent, seq)`, which would have treated a rolled-back `agent_start` as a resend. Fixed by migration 0002 (M-046).
 - **§3.4 rule order:** checking "unknown type" before "provisional" would make the provisional list useless. Provisional is checked first (M-045). The contract text is unchanged; the intent is the same.
 
+## Milestone 3: enrolment (started 2026-11-23, M-059)
+
+**Gate:** a revoked agent is refused, and a silent agent is flagged. **Build order (M-059):** the signing service, the token CLI and `POST /api/v1/enroll` first, so agent 5c can test enrolment early. Open points: MPD-40 to MPD-43.
+
+| Step | What | Files | Requirements | State |
+| --- | --- | --- | --- | --- |
+| 1 | Signing service (M-060) | `bin/signer.php`, `src/Pki/*`, `setup/templates/aio-signer.*`, `setup/11-enrolment.sh`, `tools/signer-check.php` | MS-SEC-02 | Built; 99 unit tests pass on the PC (13 new). Waiting for 11 on the VM |
+| 2 | Token CLI, CA export | `bin/token-create.php`, `bin/agent-ca.php` | MS-SEC-03, M-021, M-059 | Next |
+| 3 | `POST /api/v1/enroll` | `src/Enrol/*`, `AgentApi` | MS-ING-06, MS-SEC-03, MS-SEC-10 | |
+| 4 | `POST /api/v1/renew` | | MS-ING-11 | |
+| 5 | `GET /api/v1/config` | | MS-ING-07 | |
+| 6 | Revoke and unrevoke | | MS-SEC-02 | |
+| 7 | Admin enrolment page (MPD-40) | | MS-SEC-07 | |
+| 8 | Silent agents flagged | | MS-ING-08, MS-UI-01 | |
+| 9 | CRL (MPD-41) | | MS-SEC-02 | |
+| 10 | Simulator enrols for real; gate | | the gate | |
+
 ## Milestone 5: dashboard core (signed off 2026-11-23, M-058)
 
 Plan approved 2026-11-22 with the owner's answers (M-053, M-054): Cytoscape.js for the map, admin includes analyst, no TOTP in this milestone (MPD-38, before the pilot), defaults 12 characters / 30 min idle / 12 h / stale after 5 min, `tools/users.php unlock`, 15 internal nodes plus "other internal".
@@ -356,7 +373,7 @@ Plan approved 2026-11-22 with the owner's answers (M-053, M-054): Cytoscape.js f
 
 ## Next steps
 
-1. **Milestone 3 (enrolment) next** (M-052): plan first, for the owner's OK. Then milestone 4 (retention).
+1. **Milestone 3 (enrolment): in progress** (M-059). The owner runs `setup/11-enrolment.sh` on the VM for step 1 (the signing service); then steps 2 and 3 (token CLI, enrol endpoint). Then milestone 4 (retention).
 2. **Snapshots: removed** (2026-11-23). The owner moves the old chain files into `old-chain/` after a few days and deletes them later. The fsync figure after the change is still to be measured (`php tools/fsync-test.php`).
 3. **Open, for later:** MPD-37 (disk sizing and pilot capacity), MPD-35 (simulator volume).
 4. **Agent 5c can start now** from the approved contract (ingest-api.md §10), collector address 192.168.0.191. Agents pin the agent CA SHA-256 shown above.

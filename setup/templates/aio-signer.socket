@@ -1,0 +1,16 @@
+# Managed by aio-mothership setup/11-enrolment.sh. Do not edit here.
+# The agent CA signing service's socket (ingest-api.md §2.1 step 6; MS-SEC-02).
+# Only root and the aio-ingest group (the agent API pool) can connect.
+[Unit]
+Description=AIO Mothership agent CA signing service socket
+
+[Socket]
+ListenStream=/run/aio-signer.sock
+SocketUser=root
+SocketGroup=aio-ingest
+SocketMode=0660
+Accept=yes
+MaxConnections=8
+
+[Install]
+WantedBy=sockets.target

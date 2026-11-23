@@ -265,6 +265,20 @@ sudo php tools/users.php add <your-name> --role=admin --display="Your Name"   # 
 - **Accounts** (`tools/users.php`, MS-SEC-06..08): `add`, `list`, `role`, `password`, `unlock` (clears a lockout), `disable`, `enable`. Every change is in `audit_log`.
 - **Sign in:** `https://192.168.0.191/` in the browser on the PC (the web CA is already trusted).
 
+## Step 11: enrolment (`11-enrolment.sh`, milestone 3)
+
+After the `git pull`, re-run 09 first (it installs `vendor/` and runs the tests), then 11:
+
+```bash
+cd /opt/aio-mothership && git pull --ff-only
+sudo bash setup/09-app.sh 2>&1 | tee ~/setup-logs/09.log
+sudo bash setup/11-enrolment.sh 2>&1 | tee ~/setup-logs/11.log
+```
+
+- **The signing service (M-060):** `aio-signer.socket` listens on `/run/aio-signer.sock` (660 root:aio-ingest). Each request starts one `aio-signer@` copy as the user `aio-signer`, the only non-root user that can read the agent CA key. It has no network and no database, and the only place it can write is its own private `/tmp`. The agent API asks it to sign and never reads the key itself (MS-SEC-02).
+- **Its checks:** the key and socket permissions; the ingest pool can reach the signer, the dashboard pool and `www-data` can't, and none of them can read the key; the signer won't run as root; and real signing through the socket as `aio-ingest`, where a good CSR gets the §2.3 profile and chains to the agent CA, while an RSA key, a tampered CSR and a wrong CN are refused. Nothing is written to the database: those test certificates are thrown away.
+- **The signer's log:** `journalctl -u 'aio-signer@*' --since today`. Each line names the agent ID, serial and outcome, never the CSR or a key.
+
 ## Milestone 5: 7 days of simulator data
 
 ```bash
@@ -297,6 +311,8 @@ sudo php tools/page-times.php <your user name> --runs=5     # more runs per page
 | `/etc/aio-mothership/app.ini` | App settings (limits, back-pressure), no secrets | everyone |
 | `/var/lib/php/sessions-aio-dashboard/` | Dashboard sessions (user ID and CSRF token, no password) | `aio-dashboard` (700) |
 | `/etc/systemd/system/aio-flow-rollup.{service,timer}` | Connections-per-hour job, every minute (M-054) | from `setup/templates` |
+| `/etc/systemd/system/aio-signer.socket`, `aio-signer@.service` | The agent CA signing service (M-060) | from `setup/templates` |
+| `/run/aio-signer.sock` | The signing service socket | root and group `aio-ingest` (660) |
 | `/run/aio-ingest/` | Ingest slot and rate lock files (tmpfs) | `aio-ingest` (700) |
 | `/var/lib/aio-mothership/sim/` | Simulated agents' keys, state and run summaries (test only) | root (700) |
 | `/etc/aio-mothership/pki/agent-ca/ca.key` | Agent CA key | root and group `aio-signer` (440) |
