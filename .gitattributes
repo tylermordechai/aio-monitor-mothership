@@ -16,3 +16,4 @@
 # Vendored files stay byte for byte as published, so their SHA-256 in
 # decisions.md (M-054) matches on every checkout.
 public/dashboard/assets/vendor/** -text
+*.socket text eol=lf
