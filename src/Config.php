@@ -62,6 +62,7 @@ final class Config
             'session_max_s' => 43_200,       // (confirm) 12 h
             'stale_after_s' => 300,          // (confirm) MS-ALR-05: no check-in for 5 minutes
             'map_internal_nodes' => 15,      // busiest unmonitored internal addresses shown on their own
+            'host_rows' => 500,              // rows per host page list; a cut list says so (M-056)
             // Address ranges counted as internal; the rest is "internet".
             'internal_networks' => '10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,100.64.0.0/10,169.254.0.0/16,fc00::/7,fe80::/10',
             'slow_log_ms' => 0,              // log pages slower than this (0: off)

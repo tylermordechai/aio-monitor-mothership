@@ -133,3 +133,37 @@ table.grid th { font-weight: 600; color: var(--muted); font-size: 12px; }
 @media (max-width: 900px) {
   .map-wrap { grid-template-columns: 1fr; }
 }
+
+/* Host page (MS-UI-02, M-056) */
+.crumbs { margin: 0 0 8px; color: var(--muted); }
+.host-head { display: flex; flex-wrap: wrap; gap: 12px 32px; align-items: flex-start; justify-content: space-between; }
+.host-head h1 { display: flex; align-items: center; gap: 10px; }
+.host-head p { margin: 4px 0 0; }
+.facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px 20px; margin: 0; flex: 1 1 520px; }
+.facts div { display: flex; gap: 8px; }
+.facts dt { color: var(--muted); min-width: 92px; }
+.facts dd { margin: 0; overflow-wrap: anywhere; }
+.tabs { display: flex; flex-wrap: wrap; gap: 2px; margin: 18px 0 10px; border-bottom: 1px solid var(--border); }
+.tabs a { padding: 7px 14px; text-decoration: none; color: var(--fg); border: 1px solid transparent; border-bottom: 0; border-radius: 6px 6px 0 0; margin-bottom: -1px; }
+.tabs a.on { background: var(--panel); border-color: var(--border); font-weight: 600; }
+.tabs a:not(.on):hover { background: var(--panel); }
+.ranges .small { margin-left: 8px; }
+.panel.gaps { border-color: var(--gap); }
+.panel.gaps.none { border-color: var(--border); padding: 8px 16px; }
+.panel.gaps.none p { margin: 0; }
+.gap-list { margin: 0; padding-left: 20px; }
+.gap-list li { margin: 3px 0; }
+.scroll { overflow-x: auto; }
+.nowrap { white-space: nowrap; }
+.num { text-align: right; white-space: nowrap; }
+.path { overflow-wrap: anywhere; }
+.mono, pre.cmdline { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+pre.cmdline { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; }
+.jump a { margin-right: 12px; }
+/* How sure a value is (MS-DAT-05): facts plain, guesses and unknowns marked. */
+.cert { display: inline-block; font-size: 12px; padding: 0 6px; border-radius: 4px; }
+.c-fact { color: var(--muted); padding: 0; }
+.c-likely { background: var(--warn-bg); color: var(--warn-fg); }
+.c-guess { background: var(--warn-bg); color: var(--warn-fg); font-style: italic; }
+.c-guess::before { content: "guess: "; font-weight: 600; font-style: normal; }
+.c-unknown { background: var(--bad-bg); color: var(--bad-fg); }

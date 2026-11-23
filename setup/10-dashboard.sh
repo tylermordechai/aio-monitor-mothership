@@ -9,7 +9,7 @@
 # Safe to re-run: yes. Run after a git pull and, in this order: 06 (migration
 # 0003, analyst user, grants), 08 (vhost), 09 (packages, tests), then this.
 # Usage: sudo bash setup/10-dashboard.sh
-# Requirements: MS-SEC-04..08, MS-UI-01, MS-UI-08, M-053, M-054.
+# Requirements: MS-SEC-04..09, MS-UI-01, MS-UI-02, MS-UI-08, M-053, M-054, M-056.
 
 source "$(dirname "$0")/lib.sh"
 need_root
@@ -95,6 +95,8 @@ check "443: sign-in page" body_has 'name="password"' "$URL/login"
 check "443: signed out, / redirects to /login" bash -c "[[ \$(curl -sS --max-time 15 --cacert '$WEBCA' -o /dev/null -w '%{http_code} %{redirect_url}' '$URL/') == '303 $URL/login' ]]"
 check "443: signed out, /api/map answers 401" status_is 401 "$URL/api/map"
 check "443: signed out, a host page redirects" status_is 303 "$URL/hosts/1"
+check "443: signed out, a host tab redirects" status_is 303 "$URL/hosts/1?tab=processes"
+check "443: signed out, a command-line request goes to sign-in, nothing shown (MS-SEC-07)" status_is 303 -X POST --data 'agent_pk=1&seq=1&ts=x' "$URL/hosts/1/command-line"
 check "443: session cookie __Host-aio is Secure, HttpOnly, SameSite=Strict (MS-SEC-05)" cookie_ok
 check "443: sign-in without the CSRF token is refused (MS-SEC-05)" csrf_refused
 check "443: CSP allows scripts only from this server" header_has "^content-security-policy: .*script-src 'self';" "$URL/login"

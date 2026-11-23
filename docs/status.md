@@ -22,7 +22,7 @@ Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md
 | 2 | Ingest, simulator, load test | **Signed off** (2026-11-20, M-051). Gate passed: p95 133 ms, 0 lost, 111.3 MB per host per day |
 | 3 | Enrolment | Not started |
 | 4 | Retention (backups moved to "before ready to ship", M-026) | Not started |
-| 5 | Dashboard core | Building (next, M-052): steps 1 to 3 of 5 pushed |
+| 5 | Dashboard core | Building (M-052): steps 1 to 3 work on the VM; step 4 (host page) pushed |
 | 6 | Dashboard full, enrichment | Not started |
 | 7 | Alerts and pilot | Not started |
 
@@ -206,11 +206,11 @@ Plan approved 2026-11-22 with the owner's answers (M-053, M-054): Cytoscape.js f
 | --- | --- | --- | --- | --- |
 | 1 | Sign-in, sessions, CSRF, roles, audit, accounts; analyst DB user, narrowed dashboard grants | `src/Web/*`, `public/dashboard/index.php`, `templates/`, `tools/users.php`, `setup/sql/grants.sql`, `setup/06-mariadb.sh`, vhost and pool templates | MS-SEC-04..08, 10 | Built; on the VM the owner signed in from Edge (2026-11-22, after the M-055 fix) |
 | 2 | Connections per hour (migration 0003) and its timer; simulated hosts talk to each other; `--days=N` | `db/migrations/0003_flow_conn_hourly.sql`, `src/Jobs/FlowRollup.php`, `tools/jobs/flow-rollup.php`, `src/Sim/Network.php` | MS-DAT-04, MS-UI-08 | Built; waiting for the VM |
-| 3 | Server map and fleet table; `setup/10-dashboard.sh` | `src/Dashboard/*`, `templates/home.php`, `public/dashboard/assets/` | MS-UI-01, 07 | Built; waiting for the owner's first look |
-| 4 | Host page: connections, listening ports, processes (command lines for analysts, audited), executables, inventory, server software; gaps on every view; tab bar leaves room for Security, Shares, Health, Network and Sign-ins (MPD-39) | | MS-UI-02, 07, MS-SEC-07..09, MS-DAT-04, 05 | After the owner's look at step 3 |
+| 3 | Server map and fleet table; `setup/10-dashboard.sh` | `src/Dashboard/*`, `templates/home.php`, `public/dashboard/assets/` | MS-UI-01, 07 | Works on the VM; owner looked 2026-11-23: 4 hosts, lines right, nothing missing |
+| 4 | Host page: connections, listening ports, processes (command lines for analysts, audited), executables, inventory, server software; gaps on every view; tab bar leaves room for Security, Shares, Health, Network and Sign-ins (MPD-39) | `src/Dashboard/HostQuery.php`, `Labels.php`, `CommandLineReveal.php`, `templates/host*.php`, `templates/command-line.php` | MS-UI-02, 07, MS-SEC-07..09, MS-DAT-04, 05 | Built (M-056); unit tests pass on the PC; waiting for the VM |
 | 5 | Page timing (`tools/page-times.php`) and the gate run | | MS-UI-08 (M-050) | |
 
-- Unit tests on the PC: 78 pass. New integration tests (sign-in and lockout, the hourly table, the map) run on the VM in `09`.
+- Unit tests on the PC: 86 pass (8 new for the host page: labels, port owners, every tab rendered and escaped, no command line or reveal button for viewers). Integration tests (sign-in and lockout, the hourly table, the map, and the host page queries and audited reveal) run on the VM in `09`.
 - 2026-11-22, first sign-in on the VM: curl signed in fine, Edge always got "the sign-in form had expired". Edge sent `Origin: null` (Chromium does under `Referrer-Policy: no-referrer`) and the CSRF check refused it. Fixed in M-055: referrer policy `same-origin`, and `Origin: null` accepted only with `Sec-Fetch-Site: same-origin` (token still required). `10` now checks both. Unit tests: 78 pass (4 new CSRF cases).
 - 2026-11-23 04:38 UTC, `setup/10-dashboard.sh` at `0d1b130`: **29 passed, 0 failed** (grants and credential files, sessions directory, templates outside the web root, Cytoscape.js SHA-256, flow-rollup timer and job, sign-in page, signed-out redirects and 401, cookie flags, CSRF refusal, CSP, referrer policy and the Edge-style post (M-055), no caching, assets, health page). One admin account.
 - 2026-11-23, after the `--days=7` load: `flow-rollup.php --all` found nothing left to do (the timer had caught up, up to batch 9949, the last batch). `flow_conn_hourly`: 13,580 rows, 2026-11-15 21:00 to 2026-11-22 21:00 (7 days, ending when the load ran), 8 host IDs: the 4 from the `--days=7` load plus 4 left over from milestone 2. `tools/dev-agents.php delete` removed those hosts but not their `flow_conn_hourly` rows (the table has no agent column); the map ignores them (it draws only hosts that exist) and showed 4 hosts, as it should. Fixed: `delete` now also clears tables keyed by host only. The leftover rows are removed once by hand.

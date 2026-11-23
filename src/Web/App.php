@@ -5,14 +5,17 @@ declare(strict_types=1);
 namespace Aio\Web;
 
 use Aio\Config;
+use Aio\Dashboard\CommandLineReveal;
 use Aio\Dashboard\FleetQuery;
+use Aio\Dashboard\HostQuery;
+use Aio\Dashboard\Labels;
 use Aio\Dashboard\MapQuery;
 use Aio\Db;
 use PDO;
 
 /**
- * The dashboard on 443 (milestone 5, M-054): sign-in, the server map and the
- * fleet table. One front controller (public/dashboard/index.php); Apache
+ * The dashboard on 443 (milestone 5, M-054, M-056): sign-in, the server map,
+ * the fleet table and the host page. One front controller (public/dashboard/index.php); Apache
  * sends every path that isn't a file here (FallbackResource).
  *
  * Every page needs a signed-in user, read again from `users` on each request.
@@ -67,13 +70,16 @@ final class App
                 ? WebResponse::json(['error' => 'signed_out'], 401)
                 : WebResponse::redirect('/login');
         }
+        if ($r->method === 'POST' && preg_match('#^/hosts/(\d{1,10})/command-line$#', $r->path, $m)) {
+            return $this->commandLine($r, (int) $m[1], $user);
+        }
         if ($r->method !== 'GET') {
             return $this->notAllowed($r);
         }
         return match (true) {
             $r->path === '/' => $this->home($r, $user),
             $r->path === '/api/map' => $this->mapData($r),
-            (bool) preg_match('#^/hosts/(\d{1,10})$#', $r->path, $m) => $this->hostPage((int) $m[1], $user),
+            (bool) preg_match('#^/hosts/(\d{1,10})$#', $r->path, $m) => $this->hostPage($r, (int) $m[1], $user),
             default => $this->page('error', $user, ['title' => 'Not found', 'message' => 'There is no page at this address.'], 404),
         };
     }
@@ -162,16 +168,98 @@ final class App
         return WebResponse::json($q->build(MapQuery::range($r->q('range', '24h')), time()));
     }
 
-    /** @param array{id: int, username: string, display_name: ?string, role: string} $user */
-    private function hostPage(int $hostPk, array $user): WebResponse
+    /**
+     * The host page (MS-UI-02, MS-UI-07, M-056): a header, the coverage gaps
+     * for the range, and one tab, each tab its own request so a page reads
+     * only what it shows (MS-UI-08).
+     *
+     * @param array{id: int, username: string, display_name: ?string, role: string} $user
+     */
+    private function hostPage(WebRequest $r, int $hostPk, array $user): WebResponse
     {
-        $s = $this->db()->prepare('SELECT id, hostname FROM hosts WHERE id = ?');
-        $s->execute([$hostPk]);
-        $h = $s->fetch();
-        if (!is_array($h)) {
+        $now = time();
+        $q = new HostQuery($this->db(), $this->config);
+        $host = $q->host($hostPk, $this->config, $now);
+        if ($host === null) {
             return $this->page('error', $user, ['title' => 'Not found', 'message' => 'There is no host with this number.'], 404);
         }
-        return $this->page('error', $user, ['title' => (string) $h['hostname'], 'message' => 'The host page is the next step of milestone 5.'], 200);
+        $tab = HostQuery::tab($r->q('tab', 'connections'));
+        $range = MapQuery::range($r->q('range', '24h'));
+        $since = $now - MapQuery::RANGES[$range];
+        $v = [
+            'host' => $host,
+            'tab' => $tab,
+            'range' => $range,
+            'ranges' => MapQuery::RANGES,
+            'since' => gmdate('Y-m-d H:i:s', $since),
+            'limit' => $q->limit(),
+            'gaps' => $q->gaps($hostPk, $since, $now),
+            'seesCommandLines' => Roles::seesCommandLines($user['role']),
+            'csrf' => $this->session->csrfToken(),
+        ];
+        switch ($tab) {
+            case 'connections':
+                $v['recent'] = $q->connections($hostPk, $since, $this->config);
+                $v['snapshot'] = $q->latestSnapshot($hostPk);
+                $v['live'] = $v['snapshot'] === null ? [] : $q->liveConnections($hostPk, $v['snapshot']);
+                break;
+            case 'listening':
+                $v['snapshot'] = $q->latestSnapshot($hostPk);
+                $v['listening'] = $v['snapshot'] === null ? [] : $q->listening($hostPk, $v['snapshot']);
+                break;
+            case 'processes':
+                $v['processes'] = $q->processes($hostPk, $since);
+                break;
+            case 'executables':
+                $v['executables'] = $q->executables($hostPk);
+                break;
+            case 'inventory':
+                $v['inventory'] = $q->latestInventory($hostPk);
+                $v['items'] = [];
+                if ($v['inventory'] !== null) {
+                    foreach (['apps', 'services', 'tasks', 'startup', 'drivers', 'roles'] as $k) {
+                        $v['items'][$k] = $q->inventoryItems($hostPk, $k, $v['inventory']);
+                    }
+                }
+                $v['changes'] = $q->inventoryChanges($hostPk, $since);
+                break;
+            case 'software':
+                $v['inventory'] = $q->latestInventory($hostPk);
+                $v['software'] = $v['inventory'] === null ? null : $q->serverSoftware($hostPk, $v['inventory']);
+                $v['snapshot'] = $q->latestSnapshot($hostPk);
+                $v['owners'] = Labels::portOwners(
+                    $v['snapshot'] === null ? [] : $q->listening($hostPk, $v['snapshot']),
+                    $v['software']['sites'] ?? [],
+                    $v['software']['sql'] ?? [],
+                );
+                break;
+        }
+        $v['tabHtml'] = $this->view->render('host-' . $tab, $v, null);
+        return $this->page('host', $user, ['title' => $host['hostname']] + $v);
+    }
+
+    /**
+     * POST /hosts/{id}/command-line (MS-SEC-07..09): one command line, for an
+     * analyst or admin, audited. A POST, so a link, a prefetch or the browser
+     * history never opens one; the CSRF token is required.
+     *
+     * @param array{id: int, username: string, display_name: ?string, role: string} $user
+     */
+    private function commandLine(WebRequest $r, int $hostPk, array $user): WebResponse
+    {
+        if (!Csrf::valid($r, $this->session->csrfToken())) {
+            return $this->page('error', $user, ['title' => 'Not shown', 'message' => 'The form had expired. Go back, reload the page and try again.'], 400);
+        }
+        $reveal = new CommandLineReveal(
+            $this->db(),
+            fn (): PDO => Db::connect($this->config->string('db', 'analyst_cnf'), $this->config->string('db', 'name')),
+        );
+        $res = $reveal->reveal($user, $hostPk, (int) $r->p('agent_pk'), (int) $r->p('seq'), $r->p('ts'), $r->ip);
+        return match ($res['status']) {
+            'not_allowed' => $this->page('error', $user, ['title' => 'Not allowed', 'message' => 'Command lines are shown to analysts and admins only.'], 403),
+            'not_found' => $this->page('error', $user, ['title' => 'Not found', 'message' => 'There is no such process on this host.'], 404),
+            default => $this->page('command-line', $user, ['title' => 'Command line', 'host_pk' => $hostPk, 'res' => $res]),
+        };
     }
 
     /**
