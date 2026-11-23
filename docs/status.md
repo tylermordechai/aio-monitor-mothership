@@ -204,7 +204,7 @@ Plan approved 2026-11-22 with the owner's answers (M-053, M-054): Cytoscape.js f
 
 | Step | What | Files | Requirements | State |
 | --- | --- | --- | --- | --- |
-| 1 | Sign-in, sessions, CSRF, roles, audit, accounts; analyst DB user, narrowed dashboard grants | `src/Web/*`, `public/dashboard/index.php`, `templates/`, `tools/users.php`, `setup/sql/grants.sql`, `setup/06-mariadb.sh`, vhost and pool templates | MS-SEC-04..08, 10 | Built, unit tests pass on the PC; waiting for the VM |
+| 1 | Sign-in, sessions, CSRF, roles, audit, accounts; analyst DB user, narrowed dashboard grants | `src/Web/*`, `public/dashboard/index.php`, `templates/`, `tools/users.php`, `setup/sql/grants.sql`, `setup/06-mariadb.sh`, vhost and pool templates | MS-SEC-04..08, 10 | Built; on the VM the owner signed in from Edge (2026-11-22, after the M-055 fix) |
 | 2 | Connections per hour (migration 0003) and its timer; simulated hosts talk to each other; `--days=N` | `db/migrations/0003_flow_conn_hourly.sql`, `src/Jobs/FlowRollup.php`, `tools/jobs/flow-rollup.php`, `src/Sim/Network.php` | MS-DAT-04, MS-UI-08 | Built; waiting for the VM |
 | 3 | Server map and fleet table; `setup/10-dashboard.sh` | `src/Dashboard/*`, `templates/home.php`, `public/dashboard/assets/` | MS-UI-01, 07 | Built; waiting for the owner's first look |
 | 4 | Host page: connections, listening ports, processes (command lines for analysts, audited), executables, inventory, server software; gaps on every view | | MS-UI-02, 07, MS-SEC-07..09, MS-DAT-04, 05 | After the owner's look at step 3 |
