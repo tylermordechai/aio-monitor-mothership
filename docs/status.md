@@ -13,7 +13,8 @@ Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md
 - **The server is set up:** all of `setup/01` to `08` passed on the VM (Ubuntu Server 26.04.1 LTS, 192.168.0.191), run by the owner over SSH. The web CA is trusted on the owner's PC (thumbprint matched), and `https://192.168.0.191/health.php` loads with no certificate warning. Snapshot `M1-done` taken.
 - **Milestone 5 (dashboard core): signed off** (2026-11-23, M-058): every page under 5 s at 2 servers and 2 laptops with 7.9 days of data (slowest 416 ms). Report below.
 - **Next: milestone 3 (enrolment)**, then 4 (retention) (M-052): plan first, for the owner's OK.
-- **VM snapshots:** the owner is removing the snapshot chain now (M-050, M-058).
+- **VM snapshots: removed** (2026-11-23): the VM runs from one raw disk, `vdisk1-flat.img`, checked identical to the chain. The old files stay in `old-chain/` for a few days (details in the milestone 2 section).
+- **Milestone 3 plan** given to the owner (2026-11-23); waiting for the owner's OK before any code.
 - **Open decisions:** MPD-35 (simulator volume), MPD-37 (disk and retention, pilot capacity), MPD-38 (TOTP, before the pilot), MPD-39 (agent milestone 5d record types).
 
 ## Summary
@@ -192,6 +193,14 @@ Server: `innodb_flush_log_at_trx_commit = 1`, buffer pool 3,072 MB, binlog off.
 - Unraid host: no SSD and no pool. Ten 1.2 TB 10k SAS hard drives (HGST HUC101812CSS205), seven of them array data drives; the VM files are on `disk1`.
 - **Decided (M-050):** the hardware stays as it is; the milestone 2 gate is 2 servers and 2 laptops; 500 hosts is verified on production hardware; snapshots are merged once there is a working, readable dashboard.
 
+**Snapshot chain removed (2026-11-23, M-050, M-058):** run by the owner on the Unraid host, with the VM shut down.
+- The chain (`m1-done` 6.3 GiB, then `m1-ssh` 2.1 GiB, then `m0-off` 173 MiB, over `vdisk1.img`, raw, 6.0 GiB; none corrupt) was copied into one sparse raw file, `vdisk1-flat.img`, with `qemu-img convert -O raw`. `qemu-img compare` against the chain: **Images are identical.**
+- The VM definition changed in two lines only (checked with `diff`): the driver `qcow2` became `raw`, and the source became `vdisk1-flat.img`. `writeback`, `discard`, VirtIO and the PCI address are unchanged. The before and after XML (root-only) and Unraid's `snapshots.db` are in `old-chain/` next to the disk. Defining `aio-mothership-before.xml` again puts the old chain back.
+- After the start, `hdc` is `vdisk1-flat.img`. mariadb, apache2 and php8.5-fpm are active, with no failed units. `/` is 97 GB, 13 GB used.
+- Row counts: net_flows 6,904,203, process_events 533,402, executables 13,141, flow_conn_hourly 12,250, last batch 14,757. All are a little above gate run 2, because batches arrived between the gate run and the shutdown.
+- The owner reported everything ready afterwards. The `10-dashboard.sh` and `fsync-test.php` output wasn't pasted, so the fsync figure after the change isn't recorded yet.
+- Still to do (owner): move the four old chain files into `old-chain/` after a few days, then delete it (about 15 GB). The disk is still reached through `/mnt/user` and is on the parity-protected array (M-050).
+
 **Finding:** the slow ingest commits come from the disk under the VM, not from the CPU or the code. The cause is on the Unraid side (where the vDisk is stored and its format); it'll be checked and fixed during the resize, before the gate.
 
 **Before the VM:** unit tests and `php -l` on the PC with a portable PHP 8.5.13 (`C:\dev\tools\php`, not in the repo). Nothing has run against MariaDB or Apache yet.
@@ -348,7 +357,7 @@ Plan approved 2026-11-22 with the owner's answers (M-053, M-054): Cytoscape.js f
 ## Next steps
 
 1. **Milestone 3 (enrolment) next** (M-052): plan first, for the owner's OK. Then milestone 4 (retention).
-2. **Snapshots:** the owner is closing out the VM snapshot chain (M-050, M-058).
+2. **Snapshots: removed** (2026-11-23). The owner moves the old chain files into `old-chain/` after a few days and deletes them later. The fsync figure after the change is still to be measured (`php tools/fsync-test.php`).
 3. **Open, for later:** MPD-37 (disk sizing and pilot capacity), MPD-35 (simulator volume).
 4. **Agent 5c can start now** from the approved contract (ingest-api.md §10), collector address 192.168.0.191. Agents pin the agent CA SHA-256 shown above.
 5. **For the tech lead:** copy the changes in the repo's `mothership-plan.md` and CLAUDE.md (M-042, M-050) to the master plan, if one is kept elsewhere.
