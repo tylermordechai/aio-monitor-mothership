@@ -483,3 +483,9 @@ Proposed in [ingest-api.md](ingest-api.md) and `db/migrations/0001_initial.sql`,
 - **Found:** the first `tools/page-times.php` run (4 hosts, 7.8 days, 6.9 M flow rows, 530,114 process events) passed every page except the processes tab over 7 days: **16.3 s**, server side. The executables tab took 1.8 s. Everything else was under 100 ms.
 - **Cause:** the processes list and its count filtered `record_type` after reading every row of the range from disk (`ix_pe_host_ts` has no `record_type`), and joined every start to its stop before the 500-row limit. The executables list sorted all of the host's rows.
 - **Changed:** migration 0004 adds `process_events (host_pk, record_type, ts)` and `executables (host_pk, last_seen)` (keys only, built online). The processes query takes the newest 500 of each kind through the new index first, then joins only those to their stops, looking for stops only in the range (so older partitions are skipped once milestone 4 makes daily ones). Counts stop at 100,000 and then say "more than 100,000", so a count never reads a whole large range.
+
+### M-058 Milestone 5 signed off
+**Requirements:** MS-UI-01, 02, 07, 08, MS-SEC-04..10, MS-DAT-04, 05 · **Status:** Accepted 2026-11-23 (owner)
+- The owner signed off milestone 5 (dashboard core) as reported in status.md, "Milestone 5 report": gate passed at 2 simulated servers and 2 laptops with 7.9 days of data, slowest page 416 ms (M-050, M-057).
+- Next, per M-052: milestone 3 (enrolment), then 4 (retention), each starting with a plan for the owner's OK.
+- The owner now removes the VM snapshot chain, as agreed in M-050 once the dashboard works.

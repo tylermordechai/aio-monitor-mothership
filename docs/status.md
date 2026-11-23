@@ -2,7 +2,7 @@
 
 Last updated: 2026-11-23
 
-Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md); decisions are in [decisions.md](decisions.md) (M-001 to M-057); open items are in [pending-decisions.md](pending-decisions.md) (MPD-35, MPD-37, MPD-38, MPD-39); working rules are in [../CLAUDE.md](../CLAUDE.md).
+Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md); decisions are in [decisions.md](decisions.md) (M-001 to M-058); open items are in [pending-decisions.md](pending-decisions.md) (MPD-35, MPD-37, MPD-38, MPD-39); working rules are in [../CLAUDE.md](../CLAUDE.md).
 
 ## Pick up here
 
@@ -11,7 +11,9 @@ Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md
 - **The ingest contract (v1) is approved** (M-017). Agent 5c can build against it; the collector address is 192.168.0.191.
 - **The schema is approved** (2026-11-18): `06-mariadb.sh` printed `SCHEMA GATE: PASS` on MariaDB 11.8.6 from Ubuntu (M-017).
 - **The server is set up:** all of `setup/01` to `08` passed on the VM (Ubuntu Server 26.04.1 LTS, 192.168.0.191), run by the owner over SSH. The web CA is trusted on the owner's PC (thumbprint matched), and `https://192.168.0.191/health.php` loads with no certificate warning. Snapshot `M1-done` taken.
-- **Milestone 5 (dashboard core): built, gate passed** (2026-11-23, M-053 to M-057): every page under 5 s at 2 servers and 2 laptops with 7.9 days of data (slowest 416 ms). Report below; waiting for the owner's sign-off. Next after sign-off: milestone 3 (enrolment), then 4 (retention) (M-052).
+- **Milestone 5 (dashboard core): signed off** (2026-11-23, M-058): every page under 5 s at 2 servers and 2 laptops with 7.9 days of data (slowest 416 ms). Report below.
+- **Next: milestone 3 (enrolment)**, then 4 (retention) (M-052): plan first, for the owner's OK.
+- **VM snapshots:** the owner is removing the snapshot chain now (M-050, M-058).
 - **Open decisions:** MPD-35 (simulator volume), MPD-37 (disk and retention, pilot capacity), MPD-38 (TOTP, before the pilot), MPD-39 (agent milestone 5d record types).
 
 ## Summary
@@ -22,7 +24,7 @@ Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md
 | 2 | Ingest, simulator, load test | **Signed off** (2026-11-20, M-051). Gate passed: p95 133 ms, 0 lost, 111.3 MB per host per day |
 | 3 | Enrolment | Not started |
 | 4 | Retention (backups moved to "before ready to ship", M-026) | Not started |
-| 5 | Dashboard core | Built; gate passed 2026-11-23 (slowest page 416 ms); waiting for sign-off |
+| 5 | Dashboard core | **Signed off** 2026-11-23 (M-058); gate passed, slowest page 416 ms |
 | 6 | Dashboard full, enrichment | Not started |
 | 7 | Alerts and pilot | Not started |
 
@@ -198,7 +200,7 @@ Server: `innodb_flush_log_at_trx_commit = 1`, buffer pool 3,072 MB, binlog off.
 - **Rollback records could be dropped:** 0001 keyed `agent_lifecycle` and `inventory_link_index` on `(agent, seq)`, which would have treated a rolled-back `agent_start` as a resend. Fixed by migration 0002 (M-046).
 - **§3.4 rule order:** checking "unknown type" before "provisional" would make the provisional list useless. Provisional is checked first (M-045). The contract text is unchanged; the intent is the same.
 
-## Milestone 5: dashboard core (built 2026-11-22 to 23, gate passed)
+## Milestone 5: dashboard core (signed off 2026-11-23, M-058)
 
 Plan approved 2026-11-22 with the owner's answers (M-053, M-054): Cytoscape.js for the map, admin includes analyst, no TOTP in this milestone (MPD-38, before the pilot), defaults 12 characters / 30 min idle / 12 h / stale after 5 min, `tools/users.php unlock`, 15 internal nodes plus "other internal".
 
@@ -345,8 +347,8 @@ Plan approved 2026-11-22 with the owner's answers (M-053, M-054): Cytoscape.js f
 
 ## Next steps
 
-1. **Milestone 5 sign-off** (report above). Then milestone 3 (enrolment), then 4 (retention) (M-052); each starts with a plan for the owner's OK.
-2. **Snapshots:** with a working dashboard, the owner closes out the VM snapshot chain (M-050).
+1. **Milestone 3 (enrolment) next** (M-052): plan first, for the owner's OK. Then milestone 4 (retention).
+2. **Snapshots:** the owner is closing out the VM snapshot chain (M-050, M-058).
 3. **Open, for later:** MPD-37 (disk sizing and pilot capacity), MPD-35 (simulator volume).
 4. **Agent 5c can start now** from the approved contract (ingest-api.md §10), collector address 192.168.0.191. Agents pin the agent CA SHA-256 shown above.
 5. **For the tech lead:** copy the changes in the repo's `mothership-plan.md` and CLAUDE.md (M-042, M-050) to the master plan, if one is kept elsewhere.
