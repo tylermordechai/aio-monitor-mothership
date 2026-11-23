@@ -1,8 +1,8 @@
 # Project status
 
-Last updated: 2026-11-22
+Last updated: 2026-11-23
 
-Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md); decisions are in [decisions.md](decisions.md) (M-001 to M-054); open items are in [pending-decisions.md](pending-decisions.md) (MPD-35, MPD-37, MPD-38); working rules are in [../CLAUDE.md](../CLAUDE.md).
+Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md); decisions are in [decisions.md](decisions.md) (M-001 to M-057); open items are in [pending-decisions.md](pending-decisions.md) (MPD-35, MPD-37, MPD-38, MPD-39); working rules are in [../CLAUDE.md](../CLAUDE.md).
 
 ## Pick up here
 
@@ -11,8 +11,8 @@ Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md
 - **The ingest contract (v1) is approved** (M-017). Agent 5c can build against it; the collector address is 192.168.0.191.
 - **The schema is approved** (2026-11-18): `06-mariadb.sh` printed `SCHEMA GATE: PASS` on MariaDB 11.8.6 from Ubuntu (M-017).
 - **The server is set up:** all of `setup/01` to `08` passed on the VM (Ubuntu Server 26.04.1 LTS, 192.168.0.191), run by the owner over SSH. The web CA is trusted on the owner's PC (thumbprint matched), and `https://192.168.0.191/health.php` loads with no certificate warning. Snapshot `M1-done` taken.
-- **Milestone 5 (dashboard core) is being built** (M-052, M-053, M-054). Steps 1 to 3 (sign-in, the hourly connections table, the server map) are pushed; the owner deploys them and has a first look before step 4 (host page).
-- **Open decisions:** MPD-35 (simulator volume), MPD-37 (disk and retention, pilot capacity), MPD-38 (TOTP, before the pilot).
+- **Milestone 5 (dashboard core): built, gate passed** (2026-11-23, M-053 to M-057): every page under 5 s at 2 servers and 2 laptops with 7.9 days of data (slowest 416 ms). Report below; waiting for the owner's sign-off. Next after sign-off: milestone 3 (enrolment), then 4 (retention) (M-052).
+- **Open decisions:** MPD-35 (simulator volume), MPD-37 (disk and retention, pilot capacity), MPD-38 (TOTP, before the pilot), MPD-39 (agent milestone 5d record types).
 
 ## Summary
 
@@ -22,7 +22,7 @@ Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md
 | 2 | Ingest, simulator, load test | **Signed off** (2026-11-20, M-051). Gate passed: p95 133 ms, 0 lost, 111.3 MB per host per day |
 | 3 | Enrolment | Not started |
 | 4 | Retention (backups moved to "before ready to ship", M-026) | Not started |
-| 5 | Dashboard core | Building (M-052): steps 1 to 3 work on the VM; step 4 (host page) pushed |
+| 5 | Dashboard core | Built; gate passed 2026-11-23 (slowest page 416 ms); waiting for sign-off |
 | 6 | Dashboard full, enrichment | Not started |
 | 7 | Alerts and pilot | Not started |
 
@@ -198,7 +198,7 @@ Server: `innodb_flush_log_at_trx_commit = 1`, buffer pool 3,072 MB, binlog off.
 - **Rollback records could be dropped:** 0001 keyed `agent_lifecycle` and `inventory_link_index` on `(agent, seq)`, which would have treated a rolled-back `agent_start` as a resend. Fixed by migration 0002 (M-046).
 - **§3.4 rule order:** checking "unknown type" before "provisional" would make the provisional list useless. Provisional is checked first (M-045). The contract text is unchanged; the intent is the same.
 
-## Milestone 5: dashboard core (building, from 2026-11-22)
+## Milestone 5: dashboard core (built 2026-11-22 to 23, gate passed)
 
 Plan approved 2026-11-22 with the owner's answers (M-053, M-054): Cytoscape.js for the map, admin includes analyst, no TOTP in this milestone (MPD-38, before the pilot), defaults 12 characters / 30 min idle / 12 h / stale after 5 min, `tools/users.php unlock`, 15 internal nodes plus "other internal".
 
@@ -208,7 +208,7 @@ Plan approved 2026-11-22 with the owner's answers (M-053, M-054): Cytoscape.js f
 | 2 | Connections per hour (migration 0003) and its timer; simulated hosts talk to each other; `--days=N` | `db/migrations/0003_flow_conn_hourly.sql`, `src/Jobs/FlowRollup.php`, `tools/jobs/flow-rollup.php`, `src/Sim/Network.php` | MS-DAT-04, MS-UI-08 | Built; waiting for the VM |
 | 3 | Server map and fleet table; `setup/10-dashboard.sh` | `src/Dashboard/*`, `templates/home.php`, `public/dashboard/assets/` | MS-UI-01, 07 | Works on the VM; owner looked 2026-11-23: 4 hosts, lines right, nothing missing |
 | 4 | Host page: connections, listening ports, processes (command lines for analysts, audited), executables, inventory, server software; gaps on every view; tab bar leaves room for Security, Shares, Health, Network and Sign-ins (MPD-39) | `src/Dashboard/HostQuery.php`, `Labels.php`, `CommandLineReveal.php`, `templates/host*.php`, `templates/command-line.php` | MS-UI-02, 07, MS-SEC-07..09, MS-DAT-04, 05 | Built (M-056); on the VM 2026-11-23 `09`: 17 of 17, unit 86 pass, integration 22 pass (3,969 assertions; after fixing one test bug, a static closure using $this). Command-line reveal works on the VM: the owner (admin) opened one on SIM-0002; one `view_command_line` audit row (target `20:2272917`; details host, PID, process name, result "shown"; no command line in the row). `10`: 31 of 31 (adds: signed out, a host tab and a command-line POST go to sign-in). Owner looked and OK'd step 5 (2026-11-23) |
-| 5 | Page timing (`tools/page-times.php`) and the gate run | `tools/page-times.php`, `db/migrations/0004_host_page_indexes.sql` | MS-UI-08 (M-050) | Run 1, 2026-11-23 16:4x UTC (4 hosts, 7.8 days, 6.9 M flow rows): **FAIL**, processes tab 7 days 16.3 s; executables 1.8 s; every other page under 100 ms. Fixed in M-057 (migration 0004, query rewritten); waiting for run 2 |
+| 5 | Page timing (`tools/page-times.php`) and the gate run | `tools/page-times.php`, `db/migrations/0004_host_page_indexes.sql` | MS-UI-08 (M-050) | Run 1, 2026-11-23 16:4x UTC (4 hosts, 7.8 days, 6.9 M flow rows): **FAIL**, processes tab 7 days 16.3 s; executables 1.8 s; every other page under 100 ms. Fixed in M-057 (migration 0004, query rewritten). Run 2: **PASS**, slowest page 416 ms |
 
 - Unit tests on the PC: 86 pass (8 new for the host page: labels, port owners, every tab rendered and escaped, no command line or reveal button for viewers). Integration tests (sign-in and lockout, the hourly table, the map, and the host page queries and audited reveal) run on the VM in `09`.
 - 2026-11-23, gate run 1 (`sudo php tools/page-times.php tyler`, 3 runs per page, live simulator running): 4 hosts, 7.8 days of flows (2026-11-15 21:10 to 2026-11-23 16:43 UTC), net_flows 6,860,998 rows, flow_conn_hourly 12,110, process_events 530,114, executables 13,057. 54 URLs x 3 in 32 s. **GATE FAIL.**
@@ -225,9 +225,56 @@ Plan approved 2026-11-22 with the owner's answers (M-053, M-054): Cytoscape.js f
   | host: software | 4 | 9 | 9 | 8 | |
 
   Fixed in M-057 (migration 0004 indexes; processes query limits before it joins; counts capped).
+- 2026-11-23, after M-057: `06` applied migration 0004 (`10` checks it); `09` 17 of 17 (unit 86, integration 22, 3,959 assertions); `10` 32 of 32.
+- 2026-11-23, gate run 2 (same command, live simulator running): 4 hosts, 7.9 days of flows (2026-11-15 21:10 to 2026-11-23 17:35 UTC), net_flows 6,882,853 rows, flow_conn_hourly 12,180, process_events 531,782, executables 13,101. 54 URLs x 3 in 7 s. **GATE PASS: slowest page 416 ms** (processes, 7 days), server side 412 ms.
+
+  | Page | URLs | p50 ms | max ms | server max | Slowest |
+  | --- | ---: | ---: | ---: | ---: | --- |
+  | home | 3 | 3 | 4 | 2 | `/?range=1h` |
+  | map data | 3 | 14 | 95 | 94 | `/api/map?range=7d` |
+  | host: connections | 12 | 16 | 84 | 82 | 7 d |
+  | host: listening | 4 | 5 | 7 | 6 | |
+  | host: processes | 12 | 56 | 416 | 412 | 7 d (was 16,346) |
+  | host: executables | 4 | 34 | 34 | 31 | (was 1,814) |
+  | host: inventory | 12 | 17 | 23 | 22 | 7 d |
+  | host: software | 4 | 9 | 9 | 8 | |
 - 2026-11-22, first sign-in on the VM: curl signed in fine, Edge always got "the sign-in form had expired". Edge sent `Origin: null` (Chromium does under `Referrer-Policy: no-referrer`) and the CSRF check refused it. Fixed in M-055: referrer policy `same-origin`, and `Origin: null` accepted only with `Sec-Fetch-Site: same-origin` (token still required). `10` now checks both. Unit tests: 78 pass (4 new CSRF cases).
 - 2026-11-23 04:38 UTC, `setup/10-dashboard.sh` at `0d1b130`: **29 passed, 0 failed** (grants and credential files, sessions directory, templates outside the web root, Cytoscape.js SHA-256, flow-rollup timer and job, sign-in page, signed-out redirects and 401, cookie flags, CSRF refusal, CSP, referrer policy and the Edge-style post (M-055), no caching, assets, health page). One admin account.
 - 2026-11-23, after the `--days=7` load: `flow-rollup.php --all` found nothing left to do (the timer had caught up, up to batch 9949, the last batch). `flow_conn_hourly`: 13,580 rows, 2026-11-15 21:00 to 2026-11-22 21:00 (7 days, ending when the load ran), 8 host IDs: the 4 from the `--days=7` load plus 4 left over from milestone 2. `tools/dev-agents.php delete` removed those hosts but not their `flow_conn_hourly` rows (the table has no agent column); the map ignores them (it draws only hosts that exist) and showed 4 hosts, as it should. Fixed: `delete` now also clears tables keyed by host only. The leftover rows are removed once by hand.
+
+## Milestone 5 report (2026-11-23)
+
+**What was built:** the dashboard on 443 (decisions M-053 to M-057).
+- **Sign-in:** local accounts (Argon2id, at least 12 characters, a 15-minute lock after 5 failures, all *(confirm)*), PHP file sessions with a `__Host-` cookie, 30 minutes idle and 12 hours in all *(confirm)*, CSRF token plus Origin and Sec-Fetch-Site checks (M-055 for Edge), a strict CSP, no caching.
+- **Roles and accounts:** viewer < analyst < admin; `tools/users.php` (add, list, role, password, unlock, disable, enable), every change audited.
+- **Audit log:** sign-ins, failures, lockouts, sign-outs, account changes and every command-line view, written by database users that can only insert.
+- **Database users:** `aio_dashboard` reads everything but command lines and writes only users and audit; `aio_analyst` reads only command lines and writes only audit (M-053).
+- **Connections per hour:** `flow_conn_hourly` (migration 0003), kept by a timer job every minute (1 to 3 minutes behind, shown on the pages).
+- **Server map and fleet table:** hosts with status and last check-in, lines between hosts, the 15 busiest internal addresses, one "internet" cloud, coverage gaps (Cytoscape.js 3.34.4, vendored, checksum recorded).
+- **Host page:** connections first (recent from the hourly table, live from the latest snapshot), listening ports, processes, executables, inventory and server software; coverage gaps on every tab; every "how we know" field shown as fact, likely, guess or unknown; command lines only through an audited "Show" for analysts and admins; room for the agent's 5d tabs (MPD-39).
+- **Tools:** `tools/page-times.php` (the gate), simulator `--days=N` and `--laptops=N`, simulated hosts that talk to each other.
+
+**How to run and test it:** `docs/setup.md`, "Step 10: the dashboard" and "Milestone 5: 7 days of simulator data" (with "The gate: page times"). Unit tests: `php vendor/bin/phpunit --testsuite unit` (86, also on the PC). Integration tests run in `setup/09-app.sh` on the VM (22, against `aio_test`). `setup/10-dashboard.sh` checks grants, files, the timer and the HTTPS security behaviour (32 checks).
+
+**Results:**
+
+| Gate (M-050) | Needed | Result |
+| --- | --- | --- |
+| Data | 2 simulated servers and 2 laptops, 7 days | 4 hosts, 7.9 days: 6.9 M flow rows, 532 k process events, 13 k executables |
+| Every page under 5 s | yes | **PASS**: slowest 416 ms (processes, 7 days); 54 URLs x 3 runs |
+| Checks | | `09` 17/17 (86 unit, 22 integration tests), `10` 32/32 |
+
+- Found and fixed on the way: Edge sign-in refused under `no-referrer` (M-055); the processes tab at 16.3 s, fixed with indexes and a limit-first query (M-057); simulated-agent deletion left hourly rows behind (fixed in `dev-agents.php`).
+- Seen by the owner: the map (4 hosts, lines right, nothing missing), the host page, a command line shown and its audit row.
+
+**Must requirements still open after milestone 5:**
+- **MS-UI-08 at 500 hosts:** met at the M-050 gate (4 hosts); 500 hosts is verified on production hardware.
+- **MS-UI-01:** open alerts by severity show as "not built yet" (milestone 7).
+- **MS-SEC-06:** the optional TOTP second factor (MPD-38, before the pilot).
+- **MS-SEC-07:** exports (analysts) and the admin pages for users and enrolment come with milestones 6 and 3; users are managed with `tools/users.php` for now.
+- **MS-SEC-08:** export audit comes with exports (milestone 6); keeping the log 2 years is retention (milestone 4).
+- **MS-SEC-09:** clearing command lines after 30 days *(confirm)* is retention (milestone 4).
+- **MS-UI-03 to 06** (connections view with filters and enrichment, change history, alerts queue, fleet search and export): milestones 6 and 7.
 
 ## Milestone 2 report (2026-11-20)
 
@@ -290,17 +337,19 @@ Plan approved 2026-11-22 with the owner's answers (M-053, M-054): Cytoscape.js f
   - MS-SEC-12: automatic security updates.
 - **Met in milestone 2:** MS-ING-01 to 05, 08, 09 and 12; MS-DAT-01 (migrations 0001, 0002); MS-DAT-06 (measured: 111.3 MB per host per day; the disk sizing is MPD-37).
 - **Met at the M-050 gate, open at 500 hosts:** MS-ING-10 (p95 133 ms at 4 hosts), verified on production hardware.
-- **Stored, not yet shown:** MS-DAT-05 (the fields are kept; the dashboard shows them in milestones 5 and 6). MS-DAT-04 (flows combined in queries) comes with the dashboard.
+- **Met in milestone 5:** MS-DAT-01 (migrations 0003, 0004), MS-DAT-04 (flows combined by the D-016 key), MS-DAT-05 (every source field shown as fact, likely, guess or unknown), MS-UI-02, MS-UI-07, MS-UI-09 (desktop browser, tested in Edge), MS-SEC-05, MS-SEC-10; MS-SEC-04 for the dashboard and analyst users. Partly: MS-UI-01 (alerts in milestone 7), MS-SEC-06 (TOTP, MPD-38), MS-SEC-07 and 08 (exports and admin pages later; 2-year keep is retention), MS-SEC-09 (the 30-day clearing is retention).
+- **Met at the M-050 gate, open at 500 hosts:** MS-UI-08 (every page under 5 s at 4 hosts, 7.9 days), verified on production hardware.
 - **Not built yet:** MS-ING-06 and 07 (milestone 3); MS-DAT-02 and 03 (milestone 4).
 - **Every other Must** (enrolment, retention, dashboard, alerts, operations) is open, in milestones 3 to 7.
 - **Only partly met:** MS-OPS-07 (rebuild from the repo). setup.md and the scripts cover the server; the app, timers and restore come later.
 
 ## Next steps
 
-1. **Milestone 5 (dashboard core) next** (M-052): plan given 2026-11-20, waiting for the owner's OK. Then milestone 3 (enrolment), then 4 (retention).
-2. **Open, for later:** MPD-37 (disk sizing and pilot capacity), MPD-35 (simulator volume).
-3. **Agent 5c can start now** from the approved contract (ingest-api.md §10), collector address 192.168.0.191. Agents pin the agent CA SHA-256 shown above.
-4. **For the tech lead:** copy the changes in the repo's `mothership-plan.md` and CLAUDE.md (M-042, M-050) to the master plan, if one is kept elsewhere.
+1. **Milestone 5 sign-off** (report above). Then milestone 3 (enrolment), then 4 (retention) (M-052); each starts with a plan for the owner's OK.
+2. **Snapshots:** with a working dashboard, the owner closes out the VM snapshot chain (M-050).
+3. **Open, for later:** MPD-37 (disk sizing and pilot capacity), MPD-35 (simulator volume).
+4. **Agent 5c can start now** from the approved contract (ingest-api.md §10), collector address 192.168.0.191. Agents pin the agent CA SHA-256 shown above.
+5. **For the tech lead:** copy the changes in the repo's `mothership-plan.md` and CLAUDE.md (M-042, M-050) to the master plan, if one is kept elsewhere.
 
 ## Before the pilot (M-031)
 
