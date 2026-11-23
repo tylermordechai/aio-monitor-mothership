@@ -60,6 +60,15 @@ csrf_refused() {
     after=$(mariadb -N -e "SELECT COUNT(*) FROM $AIO_DB_NAME.audit_log WHERE action='sign_in'")
     [[ "$before" == "$after" ]]
 }
+edge_post() {
+    # What Edge sent under the old no-referrer policy: the form's token,
+    # Origin null, Sec-Fetch-Site same-origin. A made-up user, so the answer
+    # must be "Sign-in failed", not "had expired".
+    get -c "$WORK/jar3" -b "$WORK/jar3" "$URL/login" >/dev/null || return 1
+    local t; t=$(grep -o 'name="_csrf" value="[^"]*"' "$WORK/b" | cut -d'"' -f4)
+    get -c "$WORK/jar3" -b "$WORK/jar3" -H 'Origin: null' -H 'Sec-Fetch-Site: same-origin' --data-urlencode "_csrf=$t" --data 'username=nobody-m055&password=wrong-password-1' "$URL/login" >/dev/null || return 1
+    body_has 'Sign-in failed' -c "$WORK/jar3" -b "$WORK/jar3" "$URL/login"
+}
 pool_reads() { sudo -u aio-dashboard test -r "$1"; }
 pool_cant_read() { ! sudo -u aio-dashboard test -r "$1"; }
 mig3() { [[ $(mariadb -N -e "SELECT COUNT(*) FROM $AIO_DB_NAME.schema_migrations WHERE version='0003_flow_conn_hourly'") == 1 ]]; }
@@ -90,6 +99,8 @@ check "443: session cookie __Host-aio is Secure, HttpOnly, SameSite=Strict (MS-S
 check "443: sign-in without the CSRF token is refused (MS-SEC-05)" csrf_refused
 check "443: CSP allows scripts only from this server" header_has "^content-security-policy: .*script-src 'self';" "$URL/login"
 check "443: CSP forbids framing" header_has "^content-security-policy: .*frame-ancestors 'none'" "$URL/login"
+check "443: referrer only to the dashboard itself (M-055)" header_has '^referrer-policy: same-origin' "$URL/login"
+check "443: Edge-style sign-in post (Origin null, same-origin) passes the CSRF check (M-055)" edge_post
 check "443: nothing cached" header_has '^cache-control: no-store' "$URL/login"
 check "443: stylesheet served" status_is 200 "$URL/assets/app.css"
 check "443: map script served" status_is 200 "$URL/assets/map.js"

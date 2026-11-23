@@ -69,6 +69,10 @@ final class WebSecurityTest extends TestCase
         self::assertFalse(Csrf::valid($req(['_csrf' => [$token]], []), $token), 'array instead of string');
         self::assertFalse(Csrf::valid($req(['_csrf' => $token], ['origin' => 'https://evil.example']), $token), 'other origin');
         self::assertFalse(Csrf::valid($req(['_csrf' => $token], ['origin' => 'null']), $token), 'opaque origin');
+        self::assertTrue(Csrf::valid($req(['_csrf' => $token], ['origin' => 'null', 'sec-fetch-site' => 'same-origin']), $token), 'M-055: Edge under no-referrer');
+        self::assertFalse(Csrf::valid($req(['_csrf' => $token], ['origin' => 'null', 'sec-fetch-site' => 'cross-site']), $token), 'opaque origin from another site');
+        self::assertFalse(Csrf::valid($req(['_csrf' => $token], ['origin' => 'null', 'sec-fetch-site' => 'none']), $token), 'opaque origin, typed address');
+        self::assertFalse(Csrf::valid($req(['_csrf' => str_repeat('cd', 32)], ['origin' => 'null', 'sec-fetch-site' => 'same-origin']), $token), 'M-055 still needs the token');
         self::assertFalse(Csrf::valid($req(['_csrf' => $token], ['sec-fetch-site' => 'cross-site']), $token), 'cross-site');
         self::assertFalse(Csrf::valid($req(['_csrf' => ''], []), ''), 'no session token');
     }

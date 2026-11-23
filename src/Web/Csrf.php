@@ -21,13 +21,20 @@ final class Csrf
             return false;
         }
         $origin = $r->header('origin');
-        if ($origin !== null && $origin !== 'null' && $r->host !== '' && strcasecmp($origin, 'https://' . $r->host) !== 0) {
-            return false;
-        }
-        if ($origin === 'null') {
-            return false;
-        }
         $site = $r->header('sec-fetch-site');
-        return $site === null || in_array($site, ['same-origin', 'none'], true);
+        if ($site !== null && !in_array($site, ['same-origin', 'none'], true)) {
+            return false;
+        }
+        // M-055: Chromium sends "Origin: null" on a same-origin form post when
+        // the referrer policy is no-referrer (some privacy settings still do).
+        // That is accepted only when the browser itself says same-origin; a
+        // page can't set Sec-Fetch-Site. The token above is always required.
+        if ($origin === 'null') {
+            return $site === 'same-origin';
+        }
+        if ($origin !== null && $r->host !== '' && strcasecmp($origin, 'https://' . $r->host) !== 0) {
+            return false;
+        }
+        return true;
     }
 }
