@@ -72,6 +72,7 @@ edge_post() {
 pool_reads() { sudo -u aio-dashboard test -r "$1"; }
 pool_cant_read() { ! sudo -u aio-dashboard test -r "$1"; }
 mig3() { [[ $(mariadb -N -e "SELECT COUNT(*) FROM $AIO_DB_NAME.schema_migrations WHERE version='0003_flow_conn_hourly'") == 1 ]]; }
+mig4() { [[ $(mariadb -N -e "SELECT COUNT(*) FROM $AIO_DB_NAME.schema_migrations WHERE version='0004_host_page_indexes'") == 1 ]]; }
 argon2() { php -r 'exit(defined("PASSWORD_ARGON2ID") ? 0 : 1);'; }
 cy_sha() { [[ $(sha256sum "$CY_DIR/cytoscape.min.js" | cut -c1-64) == "$CY_SHA256" ]]; }
 job_ran() { [[ -n $(mariadb -N -e "SELECT value FROM $AIO_DB_NAME.job_state WHERE name='flow_rollup.batch_pk'") ]]; }
@@ -79,6 +80,7 @@ not_in_docroot() { [[ ! -e "$AIO_REPO/public/dashboard/templates" && -d "$AIO_RE
 
 echo
 check "migration 0003 applied (re-run 06 if not)" mig3
+check "migration 0004 applied: host page indexes (re-run 06 if not, M-057)" mig4
 check "PHP has Argon2id password hashing (MS-SEC-06)" argon2
 check "dashboard pool reads dashboard.cnf" pool_reads "$CRED_DIR/dashboard.cnf"
 check "dashboard pool reads analyst.cnf (M-053)" pool_reads "$CRED_DIR/analyst.cnf"

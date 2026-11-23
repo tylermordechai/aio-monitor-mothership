@@ -16,7 +16,7 @@ $unavail = ['process_exited' => 'not read: the process had exited', 'access_deni
 <section class="panel">
   <h2>Processes</h2>
   <p class="muted small">
-    <?= $e($p['total']) ?> process starts in the range<?= $p['total'] > count($p['rows']) ? $e(', newest ' . count($p['rows']) . ' shown') : '' ?>.
+    <?= $e((!empty($p['total_capped']) ? 'More than ' : '') . number_format($p['total'])) ?> process starts in the range<?= $p['total'] > count($p['rows']) ? $e(', newest ' . count($p['rows']) . ' shown') : '' ?>.
     <?php if ($v['seesCommandLines']) : ?>Command lines: "Show" opens one; every view is recorded in the audit log under your name (MS-SEC-08).
     <?php else : ?>Command lines are shown to analysts and admins only.<?php endif; ?>
   </p>

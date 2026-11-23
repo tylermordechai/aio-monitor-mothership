@@ -37,6 +37,9 @@ final class HostQuery
      */
     public const LATER_TABS = ['security' => 'Security', 'shares' => 'Shares', 'health' => 'Health', 'network' => 'Network', 'signins' => 'Sign-ins'];
 
+    /** Counts above this say "more than" instead of reading every row (MS-UI-08, M-057). */
+    public const COUNT_CAP = 100_000;
+
     private readonly int $limit;
 
     public function __construct(private readonly PDO $pdo, Config $config)
@@ -293,23 +296,31 @@ final class HostQuery
      * there is one. The command line is never read here: only the flags,
      * and whether one is stored (MS-SEC-07, M-011).
      *
-     * @return array{rows: list<array<string, mixed>>, total: int}
+     * The newest rows of each kind are taken first, through
+     * ix_pe_host_type_ts (migration 0004, M-057), and only those are joined
+     * to their stops; the stops are looked for only in the range, so old
+     * partitions are skipped. The count stops at COUNT_CAP.
+     *
+     * @return array{rows: list<array<string, mixed>>, total: int, total_capped: bool}
      */
     public function processes(int $hostPk, int $since): array
     {
         $from = gmdate('Y-m-d H:i:s', $since);
+        $cols = 'host_pk, agent_pk, seq, ts, record_type, pid, parent_pid, session_id, start_time, process_name, exe, exe_sha256,
+                 exe_error, `user`, user_source, has_command_line, command_line_length, command_line_truncated,
+                 command_line_redacted, command_line_unavailable';
+        $one = "(SELECT $cols FROM process_events FORCE INDEX (ix_pe_host_type_ts)
+                  WHERE host_pk = ? AND record_type = ? AND ts >= ? ORDER BY ts DESC LIMIT {$this->limit})";
         $s = $this->pdo->prepare(
-            "SELECT p.agent_pk, p.seq, p.ts, p.record_type, p.pid, p.parent_pid, p.session_id, p.start_time, p.process_name, p.exe, p.exe_sha256,
-                    p.exe_error, p.`user`, p.user_source, p.has_command_line, p.command_line_length, p.command_line_truncated,
-                    p.command_line_redacted, p.command_line_unavailable, s.exit_time, s.exit_code
-               FROM process_events p
+            "SELECT p.*, s.exit_time, s.exit_code
+               FROM ($one UNION ALL $one) p
                LEFT JOIN process_events s
-                 ON s.host_pk = p.host_pk AND s.pid = p.pid AND s.start_time = p.start_time AND s.record_type = 'process_stop'
-              WHERE p.host_pk = ? AND p.ts >= ? AND p.record_type IN ('process_start', 'process_snapshot')
+                 ON s.host_pk = p.host_pk AND s.pid = p.pid AND s.start_time = p.start_time
+                AND s.record_type = 'process_stop' AND s.ts >= ?
               ORDER BY p.ts DESC
               LIMIT " . $this->limit
         );
-        $s->execute([$hostPk, $from]);
+        $s->execute([$hostPk, 'process_start', $from, $hostPk, 'process_snapshot', $from, $from]);
         $out = [];
         foreach ($s as $r) {
             $out[] = [
@@ -336,9 +347,16 @@ final class HostQuery
                 'exit_code' => $r['exit_code'] === null ? null : (int) $r['exit_code'],
             ];
         }
-        $t = $this->pdo->prepare("SELECT COUNT(*) FROM process_events WHERE host_pk = ? AND ts >= ? AND record_type IN ('process_start', 'process_snapshot')");
-        $t->execute([$hostPk, $from]);
-        return ['rows' => $out, 'total' => (int) $t->fetchColumn()];
+        $total = 0;
+        foreach (['process_start', 'process_snapshot'] as $type) {
+            $t = $this->pdo->prepare(
+                'SELECT COUNT(*) FROM (SELECT 1 FROM process_events FORCE INDEX (ix_pe_host_type_ts)
+                  WHERE host_pk = ? AND record_type = ? AND ts >= ? LIMIT ' . (self::COUNT_CAP + 1) . ') c'
+            );
+            $t->execute([$hostPk, $type, $from]);
+            $total += (int) $t->fetchColumn();
+        }
+        return ['rows' => $out, 'total' => min($total, self::COUNT_CAP), 'total_capped' => $total > self::COUNT_CAP];
     }
 
     /** @return array{rows: list<array<string, mixed>>, total: int} executables seen on the host, latest first (MS-DAT-05) */
@@ -348,7 +366,7 @@ final class HostQuery
             "SELECT path, size, mod_time, sha256, hash_status, access_denied_reason, would_need_privilege, error,
                     sig_status, sig_type, sig_signer, product_name, company_name,
                     JSON_VALUE(version_info, '$.file_version') AS file_version, version_info_error, first_seen, last_seen
-               FROM executables WHERE host_pk = ? ORDER BY last_seen DESC LIMIT " . $this->limit
+               FROM executables FORCE INDEX (ix_exe_host_last_seen) WHERE host_pk = ? ORDER BY last_seen DESC LIMIT " . $this->limit
         );
         $s->execute([$hostPk]);
         $out = [];
