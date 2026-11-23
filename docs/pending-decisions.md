@@ -1,11 +1,11 @@
 # Pending decisions
 
-Last updated: 2026-11-22 (MPD-38 added)
+Last updated: 2026-11-23 (MPD-39 added)
 
 Every *(confirm)* value and open question still open, each with a recommendation. To answer, reply with the ID and your choice, for example "MPD-32: keep". Answers are recorded in [decisions.md](decisions.md) and removed from here.
 
 - **Answered:** MPD-01 to MPD-34, recorded as M-017 to M-041; MPD-36, recorded as M-050.
-- **Open:** MPD-35 (the default is in the code), MPD-37 (later) and MPD-38 (before the pilot).
+- **Open:** MPD-35 (the default is in the code), MPD-37 (later), MPD-38 (before the pilot) and MPD-39 (when the agent's 5d formats are final).
 
 ### MPD-35 How much one simulated server produces
 - **Context:** MS-DAT-06 (MB per host per day) and the load test depend on the simulator's volume per host (`src/Sim/Profile.php`, M-049). The defaults are estimates.
@@ -26,6 +26,13 @@ Every *(confirm)* value and open question still open, each with a recommendation
 - **Context:** MS-SEC-06 asks for an optional TOTP second factor. The owner left it out of milestone 5 (2026-11-22); `users.totp_secret_enc` and `totp_enabled` are already in the schema.
 - **Proposal:** RFC 6238 codes (30 s, 6 digits, SHA-1, one step either side), the secret encrypted with an app key kept in `/etc/aio-mothership/`, set up by `tools/users.php totp <name>` showing the secret as text for the authenticator app (no QR library), and required for admins.
 - **Recommendation:** build it before the pilot, when real hosts and command lines are on the dashboard.
+
+### MPD-39 Agent milestone 5d record types (provisional until their formats are final)
+- **Context (owner, 2026-11-23, FYI, no action now):** agent milestone 5d will add record types for local users and admins, firewall, browser extensions, security settings, shares, health samples (every 5 minutes), patch level, network setup and sign-ins. Their names and formats are not final; the local copy of the agent repo (`6bd6de7`) does not name them yet.
+- **Until the formats are final:** quarantine them as "provisional type, no table yet" (CLAUDE.md, ingest-api.md §9), never dropped. Note: today a type not on `ingest.provisional_record_types` (empty) is still quarantined, but with the reason "unknown record_type". When the agent publishes the 5d type names, add them to that list (config only, no code) so the reason reads "provisional type, no table yet"; tables and a migration follow once the PM sends the final formats.
+- **Host page (milestone 5 step 4):** the tab bar is built so more tabs can be added; room is left for **Security** (local users and admins, firewall, security settings, patch level, browser extensions), **Shares**, **Health** (the 5-minute samples, a time-based view, so coverage gaps show on it), **Network** (network setup) and **Sign-ins** (also time-based, with gaps). They are not shown until their data exists.
+- **Open questions for later:** the size of the health samples (every 5 min, per host) for MPD-37; whether sign-ins and local-account names are sensitive like command lines (analysts only, audited) or open to viewers.
+- **Recommendation:** no change now; revisit when the agent's 5d formats are final.
 
 ### Deferred with the backups (M-026)
 - **Unraid:** free disk on the cache pool, and where the off-box backup copy goes. Settled with the "before ready to ship" backup work.
