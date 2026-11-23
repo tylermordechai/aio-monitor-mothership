@@ -489,3 +489,13 @@ Proposed in [ingest-api.md](ingest-api.md) and `db/migrations/0001_initial.sql`,
 - The owner signed off milestone 5 (dashboard core) as reported in status.md, "Milestone 5 report": gate passed at 2 simulated servers and 2 laptops with 7.9 days of data, slowest page 416 ms (M-050, M-057).
 - Next, per M-052: milestone 3 (enrolment), then 4 (retention), each starting with a plan for the owner's OK.
 - The owner now removes the VM snapshot chain, as agreed in M-050 once the dashboard works.
+
+### M-059 Milestone 3 plan accepted; points from the agent's 5c plan
+**Requirements:** MS-ING-06, 07, 08, 11, 12, MS-SEC-02, 03, 10 · **Status:** Accepted 2026-11-23 (owner)
+- **Plan:** the milestone 3 plan given on 2026-11-23 (status.md) goes ahead. Its four open points are MPD-40 to MPD-43; none blocks items 1 to 3.
+- **Build order:** the signing service, the token CLI and `POST /api/v1/enroll` first (plan items 1 to 3), so the real agent (5c, agent D-085) can test enrolment early. **No separate dev signing tool** (agent PD-66 is not needed): the dev PC enrols with a real one-time token.
+- **The agent CA travels as a PEM plus its SHA-256** (agent PD-59): the installer takes both and refuses a PEM that doesn't match. The mothership already writes `/etc/aio-mothership/pki/public/agent-ca.crt` and `fingerprints.txt` (07-pki.sh, M-037); milestone 3 adds an export command that prints both in the form the installer takes.
+- **`seq_epoch` (agent PD-65, contract §3.6):** the first `seq_epoch` the mothership sees for an agent (its first 5c `agent_start`, also after an upgrade from a pre-5c agent) is a **baseline, not a recreated state file**. Only a later change of epoch under the same `agent_id` counts as one. Today the field is kept as an unknown optional field (extra JSON) and not acted on; this rule applies when the epoch check is built.
+- **Batch size (agent PD-61):** the agent closes a batch at 1 MB **before** gzip. The mothership's 10 MB compressed request limit is unaffected.
+- **Config editing, when built:** stored values are checked against the agent's own bounds (agent `docs/milestone-5c-plan.md`, PD-62), so the dashboard can't save a value the agent would refuse. The config endpoint in milestone 3 serves defaults only.
+- **The sender:** the agent's network code runs as a separate service account and sends heartbeats with the queue size and an **"undeliverable" count**. When that field arrives, the fleet table shows it with the agent. Until its name is in the agent's docs it is kept as an unknown optional field, never quarantined.

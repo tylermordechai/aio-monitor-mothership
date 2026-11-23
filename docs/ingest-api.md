@@ -30,7 +30,7 @@
 ### 2.1 Flow
 
 1. **An admin creates an enrolment token** (admin page in milestone 5, CLI script `bin/token-create.php` in milestone 3). It is shown once and stored only as its SHA-256 hash (MS-SEC-03). The token can be tied to a host group, and optionally to an expected hostname and a re-enrolment agent ID (§2.5). Each token is single-use and one of two kinds (M-021): **`manual`**, typed by hand, valid 24 h; or **`deployment`**, put into an Intune or GPO package, valid up to 7 days (chosen when it is made) and marked as such on the admin page.
-2. **The installer gets** the collector address (the mothership's IP, M-024), the token, and the agent CA certificate (or its SHA-256 fingerprint) as MSI properties (AG-PLT-04; how the CA travels is M-002).
+2. **The installer gets** the collector address (the mothership's IP, M-024), the token, and the agent CA certificate **as a PEM together with its SHA-256 fingerprint** as MSI properties (AG-PLT-04, M-002). It refuses a PEM that doesn't match the fingerprint (M-059, agent PD-59). On the mothership, `bin/agent-ca.php` prints both.
 3. **The agent creates its key pair** locally (§2.3). The private key never leaves the host. 5c stores it in the protected data folder, encrypted with DPAPI (AG-SEC-06).
 4. **The agent sends** `POST /api/v1/enroll` with the token and a CSR whose subject CN is its `agent_id`. It first checks that the server's certificate chains to the pinned agent CA. It never sends a token to a server it hasn't verified.
 5. **The mothership checks**, in one database transaction:
@@ -226,6 +226,7 @@ Facts from the agent source (`internal/config/identity.go`, D-004, D-060, status
 **Asked of agent 5c (M-005, M-020):** keep `seq` in the same protected state file, and keep the "reserve before use" rule. Optionally add a `seq_epoch` to `agent_start`: random, and new only when the state file is **created anew** (first install, purge, a folder renamed aside, a lost or corrupt file). It is a new optional field, so it keeps `schema_version` 1 (D-073).
 
 - **What `seq_epoch` detects:** a recreated state file that somehow keeps its `agent_id` (for example a hand-repaired file), so counting restarts under the same identity.
+- **The first epoch is a baseline (M-059, agent PD-65):** the first `seq_epoch` seen for an agent, including the first one from an agent upgraded from before 5c, is a starting point, not a recreated state file. Only a later change of epoch under the same `agent_id` counts as one.
 - **What it can't detect: a VM snapshot revert.** The revert restores the old state file, and the old epoch with it, so the epoch looks unchanged. Snapshot reverts (and restored backups or clones) are caught only by the `(agent, seq, ts)` key and the regression check in the table above, which is why that check stays the primary mechanism.
 
 ## 4. `POST /api/v1/heartbeat` (MS-ING-12, AG-PRF-06, MS-ING-08, M-006; agreed at the review)
