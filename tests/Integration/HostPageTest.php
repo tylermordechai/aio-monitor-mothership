@@ -67,7 +67,8 @@ final class HostPageTest extends TestCase
         $c = $this->q()->connections($this->srv['host_pk'], $now - 3600, Config::fromArray([]));
         self::assertSame(20, $c['total'], 'one row per D-016 key');
         self::assertNotNull($c['data_until']);
-        $fromLaptop = array_values(array_filter($c['rows'], static fn ($r) => $r['peer'] !== null && $r['peer']['host_pk'] === $this->lap['host_pk']));
+        $lapPk = $this->lap['host_pk'];
+        $fromLaptop = array_values(array_filter($c['rows'], static fn ($r) => $r['peer'] !== null && $r['peer']['host_pk'] === $lapPk));
         self::assertNotEmpty($fromLaptop, 'the laptop is named as a monitored host');
         self::assertSame('inbound', $fromLaptop[0]['direction']);
         self::assertSame(Labels::FACT, $fromLaptop[0]['direction_source'][1], 'etw: a fact');
