@@ -154,9 +154,22 @@ function deleteAll(PDO $pdo): void
                 }
             }
         }
+        // Tables keyed by host only (flow_conn_hourly, M-054): cleared by host.
+        $hin = implode(',', $hosts);
+        foreach (TableMap::tables() as $t) {
+            if (in_array($t, ['hosts', 'host_names', 'agents'], true)) {
+                continue;
+            }
+            $cols = TableMap::columns($t);
+            if (isset($cols['host_pk']) && !isset($cols['agent_pk'])) {
+                $n = $pdo->exec("DELETE FROM `$t` WHERE host_pk IN ($hin)");
+                if ($n > 0) {
+                    echo "  $t: $n rows\n";
+                }
+            }
+        }
         $pdo->exec("DELETE FROM agent_certificates WHERE agent_pk IN ($in)");
         $pdo->exec("DELETE FROM agents WHERE id IN ($in)");
-        $hin = implode(',', $hosts);
         $pdo->exec("DELETE FROM host_names WHERE host_pk IN ($hin)");
         $pdo->exec("DELETE FROM hosts WHERE id IN ($hin)");
     }
