@@ -212,6 +212,7 @@ Plan approved 2026-11-22 with the owner's answers (M-053, M-054): Cytoscape.js f
 
 - Unit tests on the PC: 78 pass. New integration tests (sign-in and lockout, the hourly table, the map) run on the VM in `09`.
 - 2026-11-22, first sign-in on the VM: curl signed in fine, Edge always got "the sign-in form had expired". Edge sent `Origin: null` (Chromium does under `Referrer-Policy: no-referrer`) and the CSRF check refused it. Fixed in M-055: referrer policy `same-origin`, and `Origin: null` accepted only with `Sec-Fetch-Site: same-origin` (token still required). `10` now checks both. Unit tests: 78 pass (4 new CSRF cases).
+- 2026-11-23 04:38 UTC, `setup/10-dashboard.sh` at `0d1b130`: **29 passed, 0 failed** (grants and credential files, sessions directory, templates outside the web root, Cytoscape.js SHA-256, flow-rollup timer and job, sign-in page, signed-out redirects and 401, cookie flags, CSRF refusal, CSP, referrer policy and the Edge-style post (M-055), no caching, assets, health page). One admin account.
 
 ## Milestone 2 report (2026-11-20)
 
