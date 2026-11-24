@@ -67,6 +67,12 @@ final class Config
             'internal_networks' => '10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,100.64.0.0/10,169.254.0.0/16,fc00::/7,fe80::/10',
             'slow_log_ms' => 0,              // log pages slower than this (0: off)
         ],
+        // Milestone 3 (M-021, M-061): token lifetimes, decided in M-021.
+        'enrol' => [
+            'manual_token_hours' => 24,
+            'deployment_max_days' => 7,
+            'agent_ca_public' => '/etc/aio-mothership/pki/public/agent-ca.crt',
+        ],
         'heartbeat' => [
             'interval_s' => 60,
             'max_bytes' => 65_536,

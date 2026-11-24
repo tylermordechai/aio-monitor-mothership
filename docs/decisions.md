@@ -501,7 +501,7 @@ Proposed in [ingest-api.md](ingest-api.md) and `db/migrations/0001_initial.sql`,
 - **The sender:** the agent's network code runs as a separate service account and sends heartbeats with the queue size and an **"undeliverable" count**. When that field arrives, the fleet table shows it with the agent. Until its name is in the agent's docs it is kept as an unknown optional field, never quarantined.
 
 ### M-060 The signing service (milestone 3 step 1)
-**Requirements:** MS-SEC-02, MS-ING-06, MS-ING-11, MS-SEC-10 · **Status:** Built 2026-11-23, waiting for the VM run
+**Requirements:** MS-SEC-02, MS-ING-06, MS-ING-11, MS-SEC-10 · **Status:** Done 2026-11-24 (11: 18 of 18 on the VM)
 - **Shape:** a systemd socket, `/run/aio-signer.sock` (660 root:aio-ingest, `Accept=yes`, at most 8 at once). Each request starts one `aio-signer@` copy running `bin/signer.php` as `aio-signer` (M-037). The connection is its stdin and stdout: one JSON request, one JSON answer (`SignerProtocol`), then it exits. No daemon stays running with the key loaded.
 - **Sandbox:** no network (`PrivateNetwork`), only `AF_UNIX`, no capabilities, read-only system (`ProtectSystem=strict`, `ProtectHome`), private `/tmp`, `@system-service` system calls, 20 s run limit. It has no database credentials. It refuses to run as root.
 - **It trusts nothing from its caller:** it re-checks the CSR (`CsrCheck`: a lower-case UUID v4, a single CN equal to it, ECDSA P-256 or P-384), verifies the CSR's own signature, and sets every field of the certificate from `CertProfile`, which is fixed in code, not in a settings file. Then it checks its own output (chain, subject, serial, key, extensions) before answering.
@@ -509,3 +509,13 @@ Proposed in [ingest-api.md](ingest-api.md) and `db/migrations/0001_initial.sql`,
 - **Serial:** 16 random bytes with the top bit cleared and the next one set, so it is positive and always 32 hex digits (126 random bits). §2.3 says 128; a positive serial of fixed length can't have all 128. The certificate's own serial is what gets stored.
 - **Logging (MS-SEC-10):** one journal line per request with the agent ID, serial and outcome; never the CSR, the certificate or a key.
 - **The CRL** (MPD-41) isn't part of this. If it is built, it is made by a root job, because it needs the list of revoked serials from the database, which the signer can't read.
+
+### M-061 Enrolment tokens from the CLI, and the CA export (milestone 3 step 2)
+**Requirements:** MS-SEC-03, MS-SEC-08, MS-SEC-10, M-021 · **Status:** Built 2026-11-24, waiting for the VM run
+- **`bin/token-create.php create | list | cancel`**, run with sudo as `aio_maint` (its credentials are root-only, M-036). `manual` tokens last 24 h; `deployment` tokens last `--days`, 1 to 7 (default 7). Options: `--group`, `--hostname`, `--reenroll=<agent ID>` (only for an existing, active agent), `--note`. The lifetimes are settings (`[enrol]` in app.ini) with the M-021 values.
+- **The token is printed once.** When standard output isn't a terminal, only the token goes there and the details go to standard error, so `> token.txt` gives a file the installer can take as it is (agent `--enroll-token-file`).
+- **Stored:** SHA-256 over the whole string, `aioe_` included. The creator's login is kept in the new column `created_by_name` ("cli:aioadmin"), because `created_by` is a dashboard user ID.
+- **Cancelling** (migration 0005, `cancelled_at`, `cancelled_by`): only an open token can be cancelled. Enrolment refuses a cancelled token with the same `enrollment_token_invalid` as an unknown one. The admin page (MPD-40) will use the same `TokenStore`.
+- **Audit (MS-SEC-08):** `enrollment_token_created` (kind, group, expiry, hostname and re-enrolment limits) and `enrollment_token_cancelled`, as "cli:<login>". Never the token or its hash (MS-SEC-10).
+- **`bin/agent-ca.php`** prints the public agent CA's PEM and its SHA-256 fingerprint (DER bytes), as 64 lower-case hex digits and in openssl's colon form; `--pem` and `--sha256` print one each. No sudo needed. **To confirm with the agent PM:** which form `--ca-sha256` expects (hex with or without colons, upper or lower case). The agent plan doesn't say; accepting any of them is easiest.
+- **`tools/gen-table-map.php`** now follows `ALTER TABLE … ADD COLUMN` (with `AFTER` / `FIRST`) instead of stopping. Other column changes still stop it.

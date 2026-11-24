@@ -9,7 +9,8 @@
  * TableMapMatchesDatabaseTest checks it against information_schema on the VM.
  *
  * Run after adding a migration:  php tools/gen-table-map.php
- * A migration that ALTERs a table stops the generator; extend it first.
+ * ALTER TABLE may add columns (ADD COLUMN, AFTER/FIRST) and change keys; any
+ * other column change stops the generator until it is taught about it.
  * MS-DAT-01.
  */
 
@@ -22,15 +23,17 @@ sort($files);
 $tables = [];
 foreach ($files as $file) {
     $sql = (string) file_get_contents($file);
-    // Key-only ALTERs (DROP/ADD PRIMARY KEY, indexes) don't change columns;
-    // anything that touches a column needs this generator taught first.
-    if (preg_match('/^\s*ALTER\s+TABLE/im', stripComments($sql))
-        && preg_match('/\b(ADD\s+(COLUMN\s+)?`?\w+`?\s+(INT|BIGINT|SMALLINT|TINYINT|VARCHAR|CHAR|TEXT|JSON|DATETIME|DATE|BOOLEAN|ENUM|DOUBLE|BINARY|VARBINARY|BLOB|MEDIUMBLOB)\b|MODIFY|CHANGE|DROP\s+COLUMN|RENAME)/i', stripComments($sql))) {
-        fwrite(STDERR, basename($file) . ": ALTER TABLE changes columns; teach gen-table-map.php about it first\n");
-        exit(1);
-    }
-    foreach (createStatements($sql) as [$name, $body]) {
-        $tables[$name] = parseBody($body);
+    // Statements in file order: CREATE TABLE adds a table; ALTER TABLE may add
+    // columns (ADD COLUMN ... [AFTER x | FIRST], M-061) and change keys. Any
+    // other column change stops the generator until it is taught about it.
+    foreach (statements(stripComments($sql)) as $st) {
+        if (preg_match('/^CREATE\s+TABLE\s/i', $st)) {
+            foreach (createStatements($st) as [$name, $body]) {
+                $tables[$name] = parseBody($body);
+            }
+        } elseif (preg_match('/^ALTER\s+TABLE\s+`?(\w+)`?\s+(.*)$/is', $st, $am)) {
+            alterTable($tables, $am[1], $am[2], basename($file));
+        }
     }
 }
 ksort($tables);
@@ -42,6 +45,62 @@ $target = $root . '/src/Ingest/Schema/table_map.php';
 @mkdir(dirname($target), 0755, true);
 file_put_contents($target, $out);
 fwrite(STDOUT, 'wrote ' . count($tables) . " tables to src/Ingest/Schema/table_map.php\n");
+
+/** @return list<string> top-level statements, split on ; outside quotes */
+function statements(string $sql): array
+{
+    $out = [];
+    $cur = '';
+    $quote = null;
+    $len = strlen($sql);
+    for ($i = 0; $i < $len; $i++) {
+        $c = $sql[$i];
+        if ($quote !== null) {
+            $quote = $c === $quote ? null : $quote;
+        } elseif ($c === "'" || $c === '"') {
+            $quote = $c;
+        } elseif ($c === ';') {
+            $out[] = trim($cur);
+            $cur = '';
+            continue;
+        }
+        $cur .= $c;
+    }
+    $out[] = trim($cur);
+    return array_values(array_filter($out, static fn ($s) => $s !== ''));
+}
+
+/** @param array<string, array{columns: array<string, array<string, mixed>>}> $tables */
+function alterTable(array &$tables, string $table, string $body, string $file): void
+{
+    if (!isset($tables[$table])) {
+        fwrite(STDERR, "$file: ALTER TABLE $table before it is created\n");
+        exit(1);
+    }
+    foreach (splitTopLevel($body) as $item) {
+        $item = trim((string) preg_replace('/\s+/', ' ', $item));
+        if (preg_match('/^ADD COLUMN (.*)$/i', $item, $cm)) {
+            $def = $cm[1];
+            $after = null;
+            $first = false;
+            if (preg_match('/^(.*) AFTER `?(\w+)`?$/i', $def, $pm)) {
+                [$def, $after] = [$pm[1], $pm[2]];
+            } elseif (preg_match('/^(.*) FIRST$/i', $def, $pm)) {
+                [$def, $first] = [$pm[1], true];
+            }
+            $cols = $tables[$table]['columns'];
+            if ($after !== null && !array_key_exists($after, $cols)) {
+                fwrite(STDERR, "$file: $table has no column $after\n");
+                exit(1);
+            }
+            $pos = $first ? 0 : ($after === null ? count($cols) : (int) array_search($after, array_keys($cols), true) + 1);
+            $tables[$table]['columns'] = array_slice($cols, 0, $pos, true) + parseBody($def)['columns'] + array_slice($cols, $pos, null, true);
+        } elseif (!preg_match('/^(ADD (PRIMARY|UNIQUE|KEY|INDEX|CONSTRAINT|FOREIGN|FULLTEXT)\b|DROP (PRIMARY KEY|KEY|INDEX|FOREIGN KEY)\b|ALGORITHM ?=|LOCK ?=)/i', $item)) {
+            fwrite(STDERR, "$file: ALTER TABLE $table: \"$item\" isn't handled; teach gen-table-map.php about it first\n");
+            exit(1);
+        }
+    }
+}
 
 /** @return list<array{0:string,1:string}> */
 function createStatements(string $sql): array

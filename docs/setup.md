@@ -267,10 +267,11 @@ sudo php tools/users.php add <your-name> --role=admin --display="Your Name"   # 
 
 ## Step 11: enrolment (`11-enrolment.sh`, milestone 3)
 
-After the `git pull`, re-run 09 first (it installs `vendor/` and runs the tests), then 11:
+After the `git pull`, re-run 06 (new migrations and grants), then 09 (it installs `vendor/` and runs the tests), then 11:
 
 ```bash
 cd /opt/aio-mothership && git pull --ff-only
+sudo bash setup/06-mariadb.sh 2>&1 | tee ~/setup-logs/06.log
 sudo bash setup/09-app.sh 2>&1 | tee ~/setup-logs/09.log
 sudo bash setup/11-enrolment.sh 2>&1 | tee ~/setup-logs/11.log
 ```
@@ -278,6 +279,24 @@ sudo bash setup/11-enrolment.sh 2>&1 | tee ~/setup-logs/11.log
 - **The signing service (M-060):** `aio-signer.socket` listens on `/run/aio-signer.sock` (660 root:aio-ingest). Each request starts one `aio-signer@` copy as the user `aio-signer`, the only non-root user that can read the agent CA key. It has no network and no database, and the only place it can write is its own private `/tmp`. The agent API asks it to sign and never reads the key itself (MS-SEC-02).
 - **Its checks:** the key and socket permissions; the ingest pool can reach the signer, the dashboard pool and `www-data` can't, and none of them can read the key; the signer won't run as root; and real signing through the socket as `aio-ingest`, where a good CSR gets the §2.3 profile and chains to the agent CA, while an RSA key, a tampered CSR and a wrong CN are refused. Nothing is written to the database: those test certificates are thrown away.
 - **The signer's log:** `journalctl -u 'aio-signer@*' --since today`. Each line names the agent ID, serial and outcome, never the CSR or a key.
+- **Tokens and the CA export (M-061), checked by 11:** `bin/agent-ca.php` gives the same fingerprint as `fingerprints.txt` and works without sudo; a token made by `bin/token-create.php` has the contract format, is stored only as its SHA-256 and is audited without the token; list, cancel, a second cancel refused, an 8-day deployment token refused; the token CLI doesn't work without root. The one test token is cancelled at once and never printed.
+
+### Enrolment tokens and the agent CA (M-021, M-061)
+
+```bash
+sudo php bin/token-create.php create                                  # manual, 24 h, group "default"
+sudo php bin/token-create.php create --kind=deployment --days=7 --note="Intune pilot" > token.txt
+sudo php bin/token-create.php create --hostname=SRV-WEB-01            # only that host may use it
+sudo php bin/token-create.php create --reenroll=<agent ID>            # an agent that lost its certificate (§2.5)
+sudo php bin/token-create.php list            # open tokens; --all shows used, expired and cancelled ones
+sudo php bin/token-create.php cancel <ID>
+php bin/agent-ca.php                          # the agent CA PEM and its SHA-256, for the installer
+php bin/agent-ca.php --pem > agent-ca.crt
+php bin/agent-ca.php --sha256
+```
+
+- The token is shown once and only its SHA-256 is stored. With `> token.txt`, only the token goes into the file and the details stay on the screen. Treat a token like a password until it is used or expires; delete `token.txt` when the installer has it.
+- Every create and cancel is in the audit log as "cli:<your login>", without the token.
 
 ## Milestone 5: 7 days of simulator data
 
