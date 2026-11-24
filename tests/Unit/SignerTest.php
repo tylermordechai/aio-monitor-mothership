@@ -69,14 +69,21 @@ final class SignerTest extends TestCase
     /** @param array<string, mixed> $key */
     private static function csr(array $dn, array $key = ['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => 'prime256v1']): string
     {
-        // A minimal config: Windows PHP builds have no default openssl.cnf.
-        $cnf = sys_get_temp_dir() . '/aio-signer-test-req.cnf';
-        if (!is_file($cnf)) {
-            file_put_contents($cnf, "[req]\ndistinguished_name=dn\n[dn]\n");
+        // Windows PHP builds have no default openssl.cnf, so they get a minimal
+        // one. Linux uses the system's: with the minimal file, PHP 8.5 there
+        // refuses the key ("Private key length must be at least 384 bits,
+        // configured to 0"), as the VM showed.
+        $opt = [];
+        if (PHP_OS_FAMILY === 'Windows') {
+            $cnf = sys_get_temp_dir() . '/aio-signer-test-req.cnf';
+            if (!is_file($cnf)) {
+                file_put_contents($cnf, "[req]\ndistinguished_name=dn\ndefault_bits=2048\n[dn]\n");
+            }
+            $opt = ['config' => $cnf];
         }
-        $k = openssl_pkey_new($key + ['config' => $cnf]);
+        $k = openssl_pkey_new($key + $opt);
         self::assertNotFalse($k);
-        $csr = openssl_csr_new($dn, $k, ['digest_alg' => 'sha256', 'config' => $cnf]);
+        $csr = openssl_csr_new($dn, $k, ['digest_alg' => 'sha256'] + $opt);
         self::assertNotFalse($csr);
         openssl_csr_export($csr, $pem);
         return $pem;
