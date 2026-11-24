@@ -14,7 +14,7 @@ Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md
 - **Milestone 5 (dashboard core): signed off** (2026-11-23, M-058): every page under 5 s at 2 servers and 2 laptops with 7.9 days of data (slowest 416 ms). Report below.
 - **Next: milestone 3 (enrolment)**, then 4 (retention) (M-052): plan first, for the owner's OK.
 - **VM snapshots: removed** (2026-11-23): the VM runs from one raw disk, `vdisk1-flat.img`, checked identical to the chain. The old files stay in `old-chain/` for a few days (details in the milestone 2 section).
-- **Milestone 3 (enrolment): started** (2026-11-23, M-059). Step 1, the signing service (M-060), is done: `setup/11-enrolment.sh` passed on the VM on 2026-11-24 (18 of 18). Steps 2 (token CLI, CA export, M-061) and 3 (`POST /api/v1/enroll`, M-062) built, waiting for 06, 09 and 11 on the VM. MPD-42 answered (M-062). Open points MPD-40, MPD-41, MPD-43.
+- **Milestone 3 (enrolment): started** (2026-11-23, M-059). Step 1, the signing service (M-060), is done: `setup/11-enrolment.sh` passed on the VM on 2026-11-24 (18 of 18). Step 2 (token CLI, CA export, M-061) done on the VM on 2026-11-24 (11: 32 of 32). Step 3 (`POST /api/v1/enroll`, M-062) built, waiting for the VM. MPD-42 answered (M-062). Open points MPD-40, MPD-41, MPD-43.
 - **Open decisions:** MPD-35 (simulator volume), MPD-37 (disk and retention, pilot capacity), MPD-38 (TOTP, before the pilot), MPD-39 (agent milestone 5d record types).
 
 ## Summary
@@ -216,7 +216,7 @@ Server: `innodb_flush_log_at_trx_commit = 1`, buffer pool 3,072 MB, binlog off.
 | Step | What | Files | Requirements | State |
 | --- | --- | --- | --- | --- |
 | 1 | Signing service (M-060) | `bin/signer.php`, `src/Pki/*`, `setup/templates/aio-signer.*`, `setup/11-enrolment.sh`, `tools/signer-check.php` | MS-SEC-02 | **Done** 2026-11-24. 99 unit tests pass on the PC and the VM (13 new); 09 passed (17 of 17, 22 integration tests). 11 passed, 18 of 18 (OpenSSL 3.5.5): key and socket permissions, only aio-ingest reaches the signer, the signer refuses root, a good CSR signed with the §2.3 profile and chained to the agent CA, RSA / tampered / wrong CN refused, the log has the signing and no CSR or key. The first VM run of the unit tests failed: the test helper's minimal openssl.cnf (needed on Windows) made PHP 8.5 on Linux refuse EC keys ("configured to 0"); fixed in the test only (c0475eb) |
-| 2 | Token CLI, CA export (M-061) | `bin/token-create.php`, `bin/agent-ca.php`, `src/Enrol/*`, `src/Pki/CaExport.php`, migration 0005 | MS-SEC-03, MS-SEC-08, MS-SEC-10, M-021, M-059 | Built; 115 unit tests pass on the PC (16 new), 4 new integration tests (VM). 11 has 14 new checks. Waiting for 06, 09 and 11 on the VM. Agent PM: `--ca-sha256` accepts either form |
+| 2 | Token CLI, CA export (M-061) | `bin/token-create.php`, `bin/agent-ca.php`, `src/Enrol/*`, `src/Pki/CaExport.php`, migration 0005 | MS-SEC-03, MS-SEC-08, MS-SEC-10, M-021, M-059 | **Done** 2026-11-24. 115 unit tests pass on the PC (16 new), 4 new integration tests. 11 passed, 32 of 32 at e0022d8: migration 0005, agent-ca.php matches fingerprints.txt and works without sudo, a token stored only as its SHA-256 (manual, 24 h, cli:aioadmin), audited without the token, list, cancel, second cancel refused, 8-day deployment token refused, CLI needs root. The 06 and 09 output wasn't pasted (0005 applied, so 06 ran). Agent PM: `--ca-sha256` accepts either form |
 | 3 | `POST /api/v1/enroll` (M-062) | `src/Enrol/EnrolService.php`, `src/Pki/CertSigner.php`, `AgentApi`, `setup/sql/grants.sql`, `tools/enrol-check.php` | MS-ING-06, MS-SEC-02, MS-SEC-03, MS-SEC-08, MS-SEC-10 | Built; unit tests unchanged (115); 6 new integration tests (`EnrolTest`, VM only). 11 gains 11 checks (the audit grant and a live enrolment over 8443), 43 in all. Waiting for the VM |
 | 4 | `POST /api/v1/renew` | | MS-ING-11 | Next |
 | 5 | `GET /api/v1/config` | | MS-ING-07 | |
@@ -373,7 +373,7 @@ Plan approved 2026-11-22 with the owner's answers (M-053, M-054): Cytoscape.js f
 
 ## Next steps
 
-1. **Milestone 3 (enrolment): in progress** (M-059). Step 1 (the signing service) passed on the VM on 2026-11-24; steps 2 (token CLI, CA export) and 3 (the enrol endpoint) built, waiting for the VM; then step 4 (renew). Then milestone 4 (retention).
+1. **Milestone 3 (enrolment): in progress** (M-059). Step 1 (the signing service) passed on the VM on 2026-11-24; step 2 (token CLI, CA export) done on the VM; step 3 (the enrol endpoint) built, waiting for the VM; then step 4 (renew). Then milestone 4 (retention).
 2. **Snapshots: removed** (2026-11-23). The owner moves the old chain files into `old-chain/` after a few days and deletes them later. The fsync figure after the change is still to be measured (`php tools/fsync-test.php`).
 3. **Open, for later:** MPD-37 (disk sizing and pilot capacity), MPD-35 (simulator volume).
 4. **Agent 5c can start now** from the approved contract (ingest-api.md §10), collector address 192.168.0.191. Agents pin the agent CA SHA-256 shown above.

@@ -511,7 +511,7 @@ Proposed in [ingest-api.md](ingest-api.md) and `db/migrations/0001_initial.sql`,
 - **The CRL** (MPD-41) isn't part of this. If it is built, it is made by a root job, because it needs the list of revoked serials from the database, which the signer can't read.
 
 ### M-061 Enrolment tokens from the CLI, and the CA export (milestone 3 step 2)
-**Requirements:** MS-SEC-03, MS-SEC-08, MS-SEC-10, M-021 · **Status:** Built 2026-11-24, waiting for the VM run
+**Requirements:** MS-SEC-03, MS-SEC-08, MS-SEC-10, M-021 · **Status:** Done 2026-11-24 (11: 32 of 32 on the VM)
 - **`bin/token-create.php create | list | cancel`**, run with sudo as `aio_maint` (its credentials are root-only, M-036). `manual` tokens last 24 h; `deployment` tokens last `--days`, 1 to 7 (default 7). Options: `--group`, `--hostname`, `--reenroll=<agent ID>` (only for an existing, active agent), `--note`. The lifetimes are settings (`[enrol]` in app.ini) with the M-021 values.
 - **The token is printed once.** When standard output isn't a terminal, only the token goes there and the details go to standard error, so `> token.txt` gives a file the installer can take as it is (agent `--enroll-token-file`).
 - **Stored:** SHA-256 over the whole string, `aioe_` included. The creator's login is kept in the new column `created_by_name` ("cli:aioadmin"), because `created_by` is a dashboard user ID.
