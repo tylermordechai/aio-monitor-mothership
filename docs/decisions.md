@@ -521,7 +521,7 @@ Proposed in [ingest-api.md](ingest-api.md) and `db/migrations/0001_initial.sql`,
 - **`tools/gen-table-map.php`** now follows `ALTER TABLE … ADD COLUMN` (with `AFTER` / `FIRST`) instead of stopping. Other column changes still stop it.
 
 ### M-062 POST /api/v1/enroll (milestone 3 step 3); the ingest user may add audit rows (MPD-42)
-**Requirements:** MS-ING-06, MS-SEC-02, MS-SEC-03, MS-SEC-08, MS-SEC-10, M-003, M-021 · **Status:** Built 2026-11-24, waiting for the VM run
+**Requirements:** MS-ING-06, MS-SEC-02, MS-SEC-03, MS-SEC-08, MS-SEC-10, M-003, M-021 · **Status:** Done 2026-11-24 (11: 43 of 43 on the VM)
 - **MPD-42 (owner, 2026-11-24):** `aio_ingest` gets INSERT only on `audit_log`; no SELECT, UPDATE or DELETE. `setup/sql/grants.sql`; 11 checks it.
 - **No client certificate** on this path (Apache asks for one as optional, M-001); the one-time token is the credential. Every other path still needs one.
 - **Order:** content type, size (16 KB), the six fields as strings, the token's format, `host_id` (a GUID), `hostname`, `agent_version`, the CSR (`CsrCheck`) — all before the database. Then one transaction: the token row locked (`FOR UPDATE`; unknown, used, cancelled, expired, or the wrong `expected_hostname` all get 403 `enrollment_token_invalid`), the agent row locked, the agent rules of §2.5, signing, host, agent, certificate and token rows, the audit rows, COMMIT. Any refusal rolls back, so **a refused request never spends the token**.
