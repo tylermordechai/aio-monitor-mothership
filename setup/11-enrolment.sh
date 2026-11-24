@@ -9,6 +9,9 @@
 #   that isn't the agent ID are refused.
 #   Step 2 (M-061): bin/agent-ca.php and bin/token-create.php, with one
 #   throwaway token made, checked and cancelled (never printed).
+#   Step 3 (M-062): the ingest user's audit grant, and tools/enrol-check.php:
+#   a throwaway agent enrolled over HTTPS on 8443, used, refused, revoked
+#   and removed.
 #
 # Needs sudo: yes (run as aioadmin with sudo). Reboots: no.
 # Safe to re-run: yes. Run after a git pull and 09-app.sh (vendor/).
@@ -126,6 +129,22 @@ check_not "a second cancel is refused" tok_cancel_again
 check "a deployment token of 8 days is refused, nothing written (M-021)" tok_days_refused
 check_not "the token CLI doesn't work without root (aio_maint, M-036)" tok_needs_root
 TOK=""
+
+# --- Step 3: POST /api/v1/enroll (MS-ING-06, M-062) ---------------------------------
+grants() { mariadb -N -e "SHOW GRANTS FOR 'aio_ingest'@'localhost'"; }
+ingest_audit_insert_only() { local g; g=$(grants | grep '`audit_log`'); [[ "$g" == *"GRANT INSERT ON"* ]] && [[ "$g" != *SELECT* && "$g" != *UPDATE* && "$g" != *DELETE* ]]; }
+check "aio_ingest may only INSERT into audit_log (M-062; re-run 06 if not)" ingest_audit_insert_only
+echo
+info "Enrolment through the agent API on 8443 (tools/enrol-check.php: one throwaway agent, removed after)"
+while IFS= read -r line; do
+    case "$line" in
+        "PASS: "*) pass "${line#PASS: }" ;;
+        "FAIL: "*) fail "${line#FAIL: }" ;;
+        "PHP_EXIT: 0") ;;
+        "PHP_EXIT: "*) fail "tools/enrol-check.php ended with exit code ${line#PHP_EXIT: }" ;;
+        *) echo "  $line" ;;
+    esac
+done < <(php "$AIO_REPO/tools/enrol-check.php" "https://$AIO_IP:8443" 2>&1; echo "PHP_EXIT: $?")
 
 echo
 info "The signer's log: journalctl -u 'aio-signer@*' --since today"

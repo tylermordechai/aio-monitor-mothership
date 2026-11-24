@@ -12,7 +12,7 @@ namespace Aio\Pki;
  * the CSR again, verifies the CSR's own signature, and sets every field of
  * the certificate itself (CertProfile). It then checks its own output.
  */
-final class Signer
+final class Signer implements CertSigner
 {
     /** @param \Closure(): int|null $clock */
     public function __construct(

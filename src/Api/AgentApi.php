@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Aio\Api;
 
 use Aio\Auth\ClientCertAuth;
+use Aio\Enrol\EnrolService;
 use Aio\Config;
 use Aio\Db;
 use Aio\Heartbeat\HeartbeatService;
@@ -14,11 +15,14 @@ use Aio\Http\Response;
 use Aio\Ingest\IngestService;
 use Aio\Ingest\Throttle;
 use Aio\Ingest\WriteWarning;
+use Aio\Pki\CertSigner;
+use Aio\Pki\SignerClient;
+use Aio\Pki\SignerUnavailable;
 use PDO;
 
 /**
  * The agent API on 8443 (ingest-api.md §1). Milestone 2 serves ingest and the
- * heartbeat (M-043); enrol, config and renew come with milestone 3.
+ * heartbeat (M-043); milestone 3 adds enrol (M-062), then config and renew.
  *
  * Errors use the §7 shape. Logs name the error class and code only, never
  * request content, tokens or keys (MS-SEC-10).
@@ -28,12 +32,17 @@ final class AgentApi
     private const ROUTES = [
         '/api/v1/ingest' => 'POST',
         '/api/v1/heartbeat' => 'POST',
+        '/api/v1/enroll' => 'POST',
     ];
 
-    /** @param \Closure(): PDO $connect */
+    /**
+     * @param \Closure(): PDO $connect
+     * @param \Closure(): CertSigner|null $signer the signing service (M-060); tests pass their own
+     */
     public function __construct(
         private readonly Config $config,
         private readonly \Closure $connect,
+        private readonly ?\Closure $signer = null,
     ) {
     }
 
@@ -43,6 +52,23 @@ final class AgentApi
             $config->string('db', 'ingest_cnf'),
             $config->string('db', 'name'),
         ));
+    }
+
+    /** POST /api/v1/enroll: no client certificate; the one-time token is the credential (§2). */
+    private function enrol(Request $req): Response
+    {
+        $caPem = @file_get_contents($this->config->string('enrol', 'agent_ca_public'));
+        if ($caPem === false) {
+            throw new \RuntimeException('agent CA certificate unreadable');
+        }
+        try {
+            $pdo = ($this->connect)();
+        } catch (\PDOException $e) {
+            self::log('db_connect', $e);
+            throw ApiError::databaseUnavailable();
+        }
+        $signer = $this->signer !== null ? ($this->signer)() : new SignerClient();
+        return (new EnrolService($pdo, $this->config, $signer, $caPem))->handle($req);
     }
 
     public function handle(Request $req): Response
@@ -55,6 +81,9 @@ final class AgentApi
             }
             if ($req->method !== $method) {
                 throw ApiError::methodNotAllowed();
+            }
+            if ($req->path === '/api/v1/enroll') {
+                return $this->enrol($req);
             }
             // Cheap refusals first: no certificate, no capacity, no disk.
             if ($req->clientVerify !== 'SUCCESS') {
@@ -80,6 +109,10 @@ final class AgentApi
         } catch (\PDOException $e) {
             self::log('database', $e);
             return Response::fromError(ApiError::databaseUnavailable());
+        } catch (SignerUnavailable $e) {
+            // Nothing was committed and the token is unused: the agent retries.
+            self::log('signer', $e);
+            return Response::fromError(ApiError::internal());
         } catch (WriteWarning $e) {
             self::log('write_warning', $e);
             return Response::fromError(ApiError::internal());

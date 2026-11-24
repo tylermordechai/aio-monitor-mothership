@@ -1,11 +1,11 @@
 # Pending decisions
 
-Last updated: 2026-11-23 (MPD-40 to MPD-43 added, milestone 3)
+Last updated: 2026-11-24 (MPD-42 answered, M-062)
 
 Every *(confirm)* value and open question still open, each with a recommendation. To answer, reply with the ID and your choice, for example "MPD-32: keep". Answers are recorded in [decisions.md](decisions.md) and removed from here.
 
-- **Answered:** MPD-01 to MPD-34, recorded as M-017 to M-041; MPD-36, recorded as M-050.
-- **Open:** MPD-35 (the default is in the code), MPD-37 (later), MPD-38 (before the pilot), MPD-39 (when the agent's 5d formats are final), and MPD-40 to MPD-43 (milestone 3).
+- **Answered:** MPD-01 to MPD-34, recorded as M-017 to M-041; MPD-36, recorded as M-050; MPD-42, recorded as M-062.
+- **Open:** MPD-35 (the default is in the code), MPD-37 (later), MPD-38 (before the pilot), MPD-39 (when the agent's 5d formats are final), and MPD-40, MPD-41 and MPD-43 (milestone 3).
 
 ### MPD-35 How much one simulated server produces
 - **Context:** MS-DAT-06 (MB per host per day) and the load test depend on the simulator's volume per host (`src/Sim/Profile.php`, M-049). The defaults are estimates.
@@ -41,10 +41,6 @@ Every *(confirm)* value and open question still open, each with a recommendation
 ### MPD-41 Build the CRL in milestone 3?
 - **Context:** the contract (§2.4) has a CRL that Apache loads as a second check; the database check is the authority and already refuses revoked agents at once. Risk: if Apache loads a CRL past its next-update time, it refuses **every** agent.
 - **Recommendation:** build it with a safeguard: valid 30 days *(confirm)*, rebuilt on every revocation and daily, and a health-page warning within 7 days of expiry. Alternative: database check only, CRL later.
-
-### MPD-42 Let the ingest user write audit rows
-- **Context:** a re-enrolment revokes the old certificates, and the contract (§2.5) wants both steps in the audit log. `aio_ingest` has no access to `audit_log` today.
-- **Recommendation:** grant `aio_ingest` INSERT only on `audit_log` (it still can't read it). Needed for re-enrolment in item 3; ordinary enrolment works without it.
 
 ### MPD-43 Config editing later
 - **Context:** `GET /api/v1/config` (item 5) serves what's stored, which is the defaults until a page edits it.

@@ -72,6 +72,9 @@ final class Config
             'manual_token_hours' => 24,
             'deployment_max_days' => 7,
             'agent_ca_public' => '/etc/aio-mothership/pki/public/agent-ca.crt',
+            // ingest-api.md §7: 429 too_many_enrollments after 10 refusals in 10 minutes.
+            'max_failures' => 10,
+            'failure_window_s' => 600,
         ],
         'heartbeat' => [
             'interval_s' => 60,

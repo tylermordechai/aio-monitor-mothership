@@ -12,7 +12,8 @@ REVOKE ALL PRIVILEGES, GRANT OPTION FROM 'aio_analyst'@'localhost';
 -- ---------------------------------------------------------------------------
 -- aio_ingest: the agent API on 8443 (ingest, heartbeat, config, enrol, renew).
 -- Insert-only on record tables (INSERT IGNORE dedups, M-005); it never reads
--- them back, and it cannot read users, audit or alerts at all.
+-- them back, and it cannot read users, audit or alerts at all (it may only
+-- add audit rows, M-062).
 -- ---------------------------------------------------------------------------
 GRANT INSERT ON aio.snapshots              TO 'aio_ingest'@'localhost';
 GRANT INSERT ON aio.snap_tcp_conns         TO 'aio_ingest'@'localhost';
@@ -54,6 +55,9 @@ GRANT SELECT, INSERT, UPDATE ON aio.host_names          TO 'aio_ingest'@'localho
 GRANT SELECT, INSERT, UPDATE ON aio.agent_certificates  TO 'aio_ingest'@'localhost';
 GRANT SELECT, INSERT, UPDATE ON aio.enrollment_failures TO 'aio_ingest'@'localhost';
 GRANT SELECT, UPDATE         ON aio.enrollment_tokens   TO 'aio_ingest'@'localhost';
+-- Enrolment and re-enrolment are audited (ingest-api.md §2.5, M-062):
+-- insert only, so the agent API can't read, change or delete audit rows.
+GRANT INSERT                 ON aio.audit_log           TO 'aio_ingest'@'localhost';
 -- Read-only lookups: groups, config, retention (ts window, M-007).
 GRANT SELECT ON aio.host_groups        TO 'aio_ingest'@'localhost';
 GRANT SELECT ON aio.agent_config       TO 'aio_ingest'@'localhost';

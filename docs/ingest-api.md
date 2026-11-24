@@ -104,7 +104,9 @@ The CSR's own signature must verify. `agent_id` must be a lower-case UUID versio
 - **A new agent ID** (never seen before): accepted.
 - **An agent ID that is already enrolled and not revoked:** 409 `agent_id_in_use`, unless the token was created as a **re-enrolment token for that agent ID**. Then the old certificates are revoked, the new one issued, and both steps written to the audit log. This covers an agent that lost its certificate but kept its state. It stops a leaked ordinary token from taking over an existing agent's identity.
 - **A revoked agent ID:** 403 `agent_revoked`. A revoked agent must get a new `agent_id`, which means a clean reinstall.
-- **Host binding:** at enrolment the agent is bound to a host row, found by `host_id` and `hostname` together (cloned VMs can share a MachineGuid, D-003), or created. Several agents may point at one host over time (reinstall with `--purge`).
+- **A re-enrolment token** works only for its agent ID; for any other ID it gets 403 `enrollment_token_invalid` (M-062).
+- **A refused request never spends the token:** everything happens in one transaction, rolled back on any refusal (M-062).
+- **Host binding:** at enrolment the agent is bound to a host row, found by `host_id` and `hostname` together (cloned VMs can share a MachineGuid, D-003), or created in the token's group. An existing host keeps its group, and `host_group` in the answer is the host's group (M-062). Several agents may point at one host over time (reinstall with `--purge`).
 
 ### 2.6 Renewal (MS-ING-11, Should; M-018)
 
@@ -496,7 +498,7 @@ The message never repeats request content (no token, no CSR, no record data).
 | 415 | `unsupported_media_type` | ingest, enroll, heartbeat, renew | Wrong `Content-Type` or `Content-Encoding` | no |
 | 429 | `slow_down` | all | Rate or capacity limit, with `Retry-After` | yes |
 | 429 | `too_many_enrollments` | enroll | Too many failed enrolments from this address (10 in 10 minutes), with `Retry-After` | yes |
-| 500 | `internal_error` | all | A bug; nothing was committed | yes |
+| 500 | `internal_error` | all | A bug, or (enroll) the signing service is down; nothing was committed | yes |
 | 503 | `database_unavailable` | all | The database can't be reached, or the commit failed, with `Retry-After` | yes |
 | 503 | `storage_full` | ingest | Disk at 90 % or more (MS-OPS-08), with `Retry-After` | yes |
 | 503 | `maintenance` | all | A planned stop, with `Retry-After` | yes |

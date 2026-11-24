@@ -9,7 +9,7 @@ namespace Aio\Pki;
  * the PHP pool never reads the CA key, it asks the signer over the local
  * socket. Only root and the aio-ingest group can open the socket.
  */
-final class SignerClient
+final class SignerClient implements CertSigner
 {
     public const DEFAULT_SOCKET = '/run/aio-signer.sock';
 
