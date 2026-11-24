@@ -14,7 +14,7 @@ Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md
 - **Milestone 5 (dashboard core): signed off** (2026-11-23, M-058): every page under 5 s at 2 servers and 2 laptops with 7.9 days of data (slowest 416 ms). Report below.
 - **Next: milestone 3 (enrolment)**, then 4 (retention) (M-052): plan first, for the owner's OK.
 - **VM snapshots: removed** (2026-11-23): the VM runs from one raw disk, `vdisk1-flat.img`, checked identical to the chain. The old files stay in `old-chain/` for a few days (details in the milestone 2 section).
-- **Milestone 3 (enrolment): started** (2026-11-23, M-059). Step 1, the signing service (M-060), is built and waits for `setup/11-enrolment.sh` on the VM. Open points MPD-40 to MPD-43.
+- **Milestone 3 (enrolment): started** (2026-11-23, M-059). Step 1, the signing service (M-060), is done: `setup/11-enrolment.sh` passed on the VM on 2026-11-24 (18 of 18). Step 2 (token CLI, CA export) next. Open points MPD-40 to MPD-43.
 - **Open decisions:** MPD-35 (simulator volume), MPD-37 (disk and retention, pilot capacity), MPD-38 (TOTP, before the pilot), MPD-39 (agent milestone 5d record types).
 
 ## Summary
@@ -23,7 +23,7 @@ Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md
 | --- | --- | --- |
 | 1 | Server and contract | **Signed off** (2026-11-19). Done 2026-11-18. Contract approved (2026-11-13, M-017); schema approved (2026-11-18, schema gate passed); all 8 setup scripts passed on the VM; dashboard health page loads in the browser with the web CA |
 | 2 | Ingest, simulator, load test | **Signed off** (2026-11-20, M-051). Gate passed: p95 133 ms, 0 lost, 111.3 MB per host per day |
-| 3 | Enrolment | **Started** 2026-11-23 (M-059): step 1, the signing service, built |
+| 3 | Enrolment | **Started** 2026-11-23 (M-059): step 1, the signing service, done on the VM |
 | 4 | Retention (backups moved to "before ready to ship", M-026) | Not started |
 | 5 | Dashboard core | **Signed off** 2026-11-23 (M-058); gate passed, slowest page 416 ms |
 | 6 | Dashboard full, enrichment | Not started |
@@ -215,7 +215,7 @@ Server: `innodb_flush_log_at_trx_commit = 1`, buffer pool 3,072 MB, binlog off.
 
 | Step | What | Files | Requirements | State |
 | --- | --- | --- | --- | --- |
-| 1 | Signing service (M-060) | `bin/signer.php`, `src/Pki/*`, `setup/templates/aio-signer.*`, `setup/11-enrolment.sh`, `tools/signer-check.php` | MS-SEC-02 | Built; 99 unit tests pass on the PC (13 new). Waiting for 11 on the VM |
+| 1 | Signing service (M-060) | `bin/signer.php`, `src/Pki/*`, `setup/templates/aio-signer.*`, `setup/11-enrolment.sh`, `tools/signer-check.php` | MS-SEC-02 | **Done** 2026-11-24. 99 unit tests pass on the PC and the VM (13 new); 09 passed (17 of 17, 22 integration tests). 11 passed, 18 of 18 (OpenSSL 3.5.5): key and socket permissions, only aio-ingest reaches the signer, the signer refuses root, a good CSR signed with the §2.3 profile and chained to the agent CA, RSA / tampered / wrong CN refused, the log has the signing and no CSR or key. The first VM run of the unit tests failed: the test helper's minimal openssl.cnf (needed on Windows) made PHP 8.5 on Linux refuse EC keys ("configured to 0"); fixed in the test only (c0475eb) |
 | 2 | Token CLI, CA export | `bin/token-create.php`, `bin/agent-ca.php` | MS-SEC-03, M-021, M-059 | Next |
 | 3 | `POST /api/v1/enroll` | `src/Enrol/*`, `AgentApi` | MS-ING-06, MS-SEC-03, MS-SEC-10 | |
 | 4 | `POST /api/v1/renew` | | MS-ING-11 | |
@@ -373,7 +373,7 @@ Plan approved 2026-11-22 with the owner's answers (M-053, M-054): Cytoscape.js f
 
 ## Next steps
 
-1. **Milestone 3 (enrolment): in progress** (M-059). The owner runs `setup/11-enrolment.sh` on the VM for step 1 (the signing service); then steps 2 and 3 (token CLI, enrol endpoint). Then milestone 4 (retention).
+1. **Milestone 3 (enrolment): in progress** (M-059). Step 1 (the signing service) passed on the VM on 2026-11-24; next steps 2 and 3 (token CLI, enrol endpoint). Then milestone 4 (retention).
 2. **Snapshots: removed** (2026-11-23). The owner moves the old chain files into `old-chain/` after a few days and deletes them later. The fsync figure after the change is still to be measured (`php tools/fsync-test.php`).
 3. **Open, for later:** MPD-37 (disk sizing and pilot capacity), MPD-35 (simulator volume).
 4. **Agent 5c can start now** from the approved contract (ingest-api.md §10), collector address 192.168.0.191. Agents pin the agent CA SHA-256 shown above.
