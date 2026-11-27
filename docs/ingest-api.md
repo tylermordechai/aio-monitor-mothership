@@ -1,6 +1,8 @@
-# Ingest API contract (v1)
+# Ingest API contract (v1.1)
 
 **Status: approved (v1), 2026-11-13, at the milestone 1 review.** Nothing here is built yet. Agent milestone 5c (collector transport) is built against this document. Changes from here on are recorded as decisions (M-xxx) and keep `/api/v1`; a breaking change needs `/api/v2`.
+
+**v1.1, 2026-11-27 (M-063): detail only, nothing changes meaning.** From the agent's approved 5c plan (agent PD-67, D-087, D-088): a batch that keeps getting an answer retrying can't fix is split down to single lines, and a single line that still fails goes to the agent's `undeliverable` file (§8.1 rule 7); the heartbeat reports it (§4, `queue.undeliverable_records`, `queue.undeliverable_bytes`); `coverage_gap` gains the reason `undeliverable` (§9). Everything a v1 agent sends is still valid, and the URLs stay `/api/v1`.
 
 - Requirements: MS-ING-01 to MS-ING-12 (MS-ING-11 added at the review, M-018; MS-ING-12 for the heartbeat, M-042), plus MS-SEC-01..03, MS-SEC-10, MS-OPS-08. Agent side: AG-SEC-03/04/07, AG-DAT-01..04, AG-PRF-04/06, AG-CFG-01..03, AG-INV-16.
 - Decisions: M-001 to M-042 in [decisions.md](decisions.md); the review answers are M-017, M-024 to M-028 and M-030 to M-032. Values still open are in [pending-decisions.md](pending-decisions.md), each with a recommendation.
@@ -115,6 +117,8 @@ The CSR's own signature must verify. `agent_id` must be a lower-case UUID versio
 - **200:** the same fields as the enrolment response. The old certificate stays valid until it expires, so a lost response costs nothing; it is marked `superseded`.
 - The agent calls it once `renew_after` has passed, then daily until it succeeds.
 - An expired certificate can't renew (the handshake fails); the host then needs a re-enrolment token.
+- **Checks (M-064):** the CSR follows §2.3 with the CN of the certificate in use. A CSR with the key of the certificate in use gets 400 `csr_invalid` ("reuses the key"). A revoked certificate or agent gets 403 `agent_revoked`. Body: `Content-Type: application/json`, at most 16 KB.
+- **A superseded certificate can still renew**, so an agent whose answer was lost just tries again. Each renewal makes every other valid certificate of the agent `superseded`, and is in the audit log with the old and new serial.
 
 ## 3. `POST /api/v1/ingest` (MS-ING-01..05)
 
@@ -250,6 +254,8 @@ Request: `Content-Type: application/json`, body at most 64 KB. **No `agent_id` f
 | `queue.cap_bytes` | integer | The queue cap (AG-PRF-04, 500 MB) |
 | `queue.oldest_ts` | string or null | The `ts` of the oldest queued record |
 | `queue.dropped_records`, `queue.dropped_bytes` | integer | Dropped because the cap was hit, since install. Should be 0; anything else raises a coverage alert |
+| `queue.undeliverable_records` | integer | v1.1: lines moved to the `undeliverable` file since install (§8.1 rule 7). Should be 0; anything else is shown with the agent in the fleet table |
+| `queue.undeliverable_bytes` | integer | v1.1: the `undeliverable` file's size now (cap 10 MB, D-088) |
 | `transport.last_acked_seq` | integer | The last `acked_seq` received |
 | `transport.last_success` | string or null | When the last ingest succeeded |
 | `transport.consecutive_failures` | integer | Ingest failures in a row |
@@ -258,7 +264,7 @@ Request: `Content-Type: application/json`, body at most 64 KB. **No `agent_id` f
 | `config_etag` | string or null | The ETag of the settings in use |
 | `cert_not_after` | string | The expiry of the certificate in use |
 
-Unknown fields are accepted and kept with the heartbeat.
+Every field is optional. Unknown fields are accepted and kept with the heartbeat. (v1.1: the two `undeliverable` names are the mothership's proposal; the agent PM confirms them, M-063.)
 
 **200 OK:**
 
@@ -267,7 +273,7 @@ Unknown fields are accepted and kept with the heartbeat.
 ```
 
 - `config_etag`: if it differs from the agent's, the agent fetches `/api/v1/config`.
-- `renew_after`: set when the agent should renew (§2.6).
+- `renew_after`: null until the certificate in use is due (30 days before its `not_after`); from then on, that due time (§2.6, M-064).
 - `heartbeat_s`: the interval to use.
 
 Each heartbeat updates the agent's check-in time, version and IP (MS-ING-08) and is kept in `agent_heartbeats` (90 days). The "agent silent" alert (MS-ALR-05) fires after 5 minutes with no request of any kind.
@@ -439,7 +445,7 @@ Host: 192.168.0.191:8443
 Content-Type: application/json
 User-Agent: aio-monitor-agent/0.5.0
 
-{"agent_time":"2026-11-14T10:00:01.2Z","uptime_s":7210.4,"queue":{"records":0,"bytes":0,"cap_bytes":524288000,"oldest_ts":null,"dropped_records":0,"dropped_bytes":0},"transport":{"last_acked_seq":48213,"last_success":"2026-11-14T10:00:00.9Z","consecutive_failures":0,"last_error":null},"health":{"etw":"running","priority_class":"below_normal","working_set_bytes":31674368,"open_coverage_gap":false},"config_etag":"\"cfg-3-6\"","cert_not_after":"2027-11-14T10:05:00Z"}
+{"agent_time":"2026-11-14T10:00:01.2Z","uptime_s":7210.4,"queue":{"records":0,"bytes":0,"cap_bytes":524288000,"oldest_ts":null,"dropped_records":0,"dropped_bytes":0,"undeliverable_records":0,"undeliverable_bytes":0},"transport":{"last_acked_seq":48213,"last_success":"2026-11-14T10:00:00.9Z","consecutive_failures":0,"last_error":null},"health":{"etw":"running","priority_class":"below_normal","working_set_bytes":31674368,"open_coverage_gap":false},"config_etag":"\"cfg-3-6\"","cert_not_after":"2027-11-14T10:05:00Z"}
 ```
 
 ```json
@@ -513,7 +519,11 @@ The message never repeats request content (no token, no CSR, no record data).
 4. **Request timeout:** 60 s. A timeout counts as a failure. The lines stay in the queue, and resending them is safe (§3.5).
 5. **Draining a backlog:** after an outage the agent sends batches back to back (no 10 s pause), still one request at a time, oldest first. The server holds back the fleet with 429 (§8.2).
 6. **413:** split the batch in half and send each half, down to a single line. A single line that still gets 413 can't happen within the limits (the line limit is below the batch limit).
-7. **400 (`bad_gzip`, `empty_batch`):** an agent bug. The agent keeps the lines, logs to the Event Log, and tries again at the cap interval. It never deletes unacknowledged data.
+7. **400 (`bad_gzip`, `empty_batch`), or an `acked_seq` that doesn't match (§3.3):** an agent bug, which retrying won't fix. The agent keeps the lines and logs to the Event Log. v1.1 (agent PD-67, D-087):
+   - **after 3 such answers for the same batch**, it splits the batch in half and sends each half, as for 413, down to single lines;
+   - **a single line that still fails** moves to a local encrypted `undeliverable` file in the queue folder (cap 10 MB, a config value, D-088), so the queue behind it keeps moving. It is counted in the heartbeat (`queue.undeliverable_records`, §4) and gets a `coverage_gap` record with `reason: "undeliverable"`;
+   - **when that file is full**, the line is dropped with the same `coverage_gap` record;
+   - nothing unacknowledged is deleted from the queue for any other reason (rule 9). 429 and 5xx answers are not counted here; they follow rules 1 to 3.
 8. **401, 403:** stop sending ingest and heartbeats, keep the queue, log to the Event Log, and try once an hour. An admin fixes it on the mothership (an unrevoke, a re-enrolment token) without losing the queue. `agent_id_mismatch` is handled the same way.
 9. **Never delete a line before a 200 that includes it** (AG-DAT-04). When the queue reaches its cap, drop the oldest first (AG-PRF-04), count it, and report it in the heartbeat.
 
@@ -546,7 +556,7 @@ The tables are in `db/migrations/0001_initial.sql`. "Required" means a line with
 | `net_snapshot_summary` | `snapshots` | `tcp_conns`, `tcp_listeners`, `udp_endpoints` | Ends each snapshot |
 | `net_flow` | `net_flows` | `proto`, `family`, `local_addr`, `local_port`, `remote_addr`, `remote_port`, `direction`, `window_start`, `window_end`, `pid` | Combined per D-016 (M-013) |
 | `etw_status` | `agent_status` | `event` | |
-| `coverage_gap` | `coverage_gaps` | `reason`, `start` | Written at open and again at close (D-017) |
+| `coverage_gap` | `coverage_gaps` | `reason`, `start` | Written at open and again at close (D-017). v1.1: `reason` may be `undeliverable` (§8.1 rule 7); any reason is stored as sent |
 | `process_start`, `process_snapshot` | `process_events` (+ `process_command_lines`) | `pid` | Command line stored apart (M-011) |
 | `process_stop` | `process_events` | `pid`, `exit_time` | |
 | `executable` | `executables` | `path`, `size`, `mod_time`, `hash_status` | One row per host and file version (M-014) |
@@ -583,5 +593,5 @@ The tables are in `db/migrations/0001_initial.sql`. "Required" means a line with
 | Keep `seq` in the protected state file with "reserve before use"; optional `seq_epoch` on `agent_start` (detects a recreated state file only, not a snapshot revert; M-020) | §3.6 |
 | Heartbeat every 60 s, its own endpoint, with queue size | §4 |
 | Config with ETag; pushed detection list validated again on the agent; additive redaction | §5 |
-| Backoff, `Retry-After`, 413 splitting, stop on 401 and 403 | §8 |
+| Backoff, `Retry-After`, 413 splitting, stop on 401 and 403; v1.1: split after 3 unfixable answers, the `undeliverable` file | §8 |
 | Optional: `key` and `snapshot_id` on inventory item records | §9 |

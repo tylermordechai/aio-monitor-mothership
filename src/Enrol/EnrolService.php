@@ -8,7 +8,6 @@ use Aio\Config;
 use Aio\Http\ApiError;
 use Aio\Http\Request;
 use Aio\Http\Response;
-use Aio\Pki\CertProfile;
 use Aio\Pki\CertSigner;
 use Aio\Pki\CsrCheck;
 use Aio\Pki\CsrInvalid;
@@ -34,7 +33,7 @@ use PDO;
  */
 final class EnrolService
 {
-    public const MAX_BODY = 16_384;
+    public const MAX_BODY = CertIssue::MAX_BODY;
     private const FIELDS = ['enrollment_token', 'csr', 'agent_id', 'host_id', 'hostname', 'agent_version'];
     private const GUID = '/^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/D';
     private const HOSTNAME = '/^[^\x00-\x1f\x7f\s\/\\\\]{1,255}$/uD';
@@ -89,7 +88,7 @@ final class EnrolService
         try {
             CsrCheck::check($b['csr'], $agentId);
         } catch (CsrInvalid $e) {
-            throw self::csrInvalid($e->reason);
+            throw CertIssue::csrInvalid($e->reason);
         }
 
         $nowDb = Time::nowDb($now);
@@ -118,19 +117,6 @@ final class EnrolService
                 throw self::tokenInvalid();
             }
 
-            try {
-                $signed = $this->signer->sign($b['csr'], $agentId);
-            } catch (CsrInvalid $e) {
-                throw self::csrInvalid($e->reason);
-            }
-            $cert = openssl_x509_parse($signed['certificate']);
-            $fp = openssl_x509_fingerprint($signed['certificate'], 'sha256', true);
-            if ($cert === false || $fp === false || ($cert['subject']['CN'] ?? null) !== $agentId) {
-                throw new \RuntimeException('the signer returned an unusable certificate');
-            }
-            $notBefore = (int) $cert['validFrom_time_t'];
-            $notAfter = (int) $cert['validTo_time_t'];
-
             [$hostPk, $groupName] = $this->host(strtolower($b['host_id']), $b['hostname'], (int) $t['group_id'], $nowDb);
             $revoked = [];
             if (is_array($existing)) {
@@ -155,17 +141,10 @@ final class EnrolService
                 $agentPk = (int) $this->pdo->lastInsertId();
             }
 
-            $c = $this->pdo->prepare(
-                'INSERT INTO agent_certificates (agent_pk, serial_hex, fingerprint_sha256, not_before, not_after, issued_at, issued_via)
-                 VALUES (?, ?, ?, ?, ?, ?, \'enroll\')'
-            );
-            $c->bindValue(1, $agentPk, PDO::PARAM_INT);
-            $c->bindValue(2, $signed['serial_hex']);
-            $c->bindValue(3, $fp, PDO::PARAM_LOB);
-            $c->bindValue(4, Time::nowDb($notBefore));
-            $c->bindValue(5, Time::nowDb($notAfter));
-            $c->bindValue(6, $nowDb);
-            $c->execute();
+            // Signed after the old certificates are revoked, so the new one
+            // is the only valid one (§2.5).
+            $signed = CertIssue::signAndStore($this->pdo, $this->signer, $b['csr'], $agentId, $agentPk, 'enroll', $nowDb);
+            $notAfter = $signed['not_after'];
 
             $u = $this->pdo->prepare('UPDATE enrollment_tokens SET used_at = ?, used_by_agent_pk = ?, used_from_ip = ? WHERE id = ?');
             $u->bindValue(1, $nowDb);
@@ -199,43 +178,13 @@ final class EnrolService
             throw $e;
         }
 
-        return new Response(201, [
-            'agent_id' => $agentId,
-            'certificate' => $signed['certificate'],
-            'ca_certificate' => $this->caPem,
-            'not_after' => Time::rfc3339($notAfter),
-            'renew_after' => Time::rfc3339(CertProfile::renewAfter($notAfter)),
-            'host_group' => $groupName,
-        ]);
+        return CertIssue::answer(201, $agentId, $signed['certificate'], $notAfter, $this->caPem, $groupName);
     }
 
     /** @return array<string, string> the six fields, all strings */
     private function readBody(Request $req): array
     {
-        $ct = strtolower(trim(explode(';', (string) $req->header('content-type'))[0]));
-        if ($ct !== 'application/json') {
-            throw ApiError::unsupportedMediaType('Content-Type must be application/json');
-        }
-        $raw = $req->body(self::MAX_BODY);
-        if (strlen($raw) > self::MAX_BODY) {
-            throw new ApiError(413, 'batch_too_large', 'Enrolment body over ' . self::MAX_BODY . ' bytes', false);
-        }
-        try {
-            $o = json_decode($raw, true, 8, JSON_THROW_ON_ERROR);
-        } catch (\JsonException) {
-            throw ApiError::invalidJson();
-        }
-        if (!is_array($o) || array_is_list($o)) {
-            throw ApiError::invalidJson();
-        }
-        $out = [];
-        foreach (self::FIELDS as $f) {
-            if (!isset($o[$f]) || !is_string($o[$f]) || $o[$f] === '') {
-                throw new ApiError(400, 'missing_field', "Missing or not a string: $f", false);
-            }
-            $out[$f] = $o[$f];
-        }
-        return $out;
+        return CertIssue::jsonBody($req, self::FIELDS, 'Enrolment');
     }
 
     /** @return array<string, mixed> the locked, usable token row */
@@ -342,11 +291,5 @@ final class EnrolService
     private static function tokenInvalid(): ApiError
     {
         return new ApiError(403, 'enrollment_token_invalid', 'The enrolment token is unknown, used or expired', false);
-    }
-
-    private static function csrInvalid(string $reason): ApiError
-    {
-        $why = CsrInvalid::REASONS[$reason] ?? 'the CSR is not acceptable';
-        return new ApiError(400, 'csr_invalid', "CSR refused: $why", false);
     }
 }

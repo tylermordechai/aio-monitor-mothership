@@ -68,9 +68,9 @@ final class EnrolTest extends TestCase
         );
     }
 
-    private static function csr(string $cn): string
+    private static function csr(string $cn, ?\OpenSSLAsymmetricKey $k = null): string
     {
-        $k = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => 'prime256v1']);
+        $k ??= openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => 'prime256v1']);
         $csr = openssl_csr_new(['commonName' => $cn], $k, ['digest_alg' => 'sha256']);
         openssl_csr_export($csr, $pem);
         return $pem;
@@ -258,5 +258,81 @@ final class EnrolTest extends TestCase
 
         // Another address is not affected, and the token was never spent.
         self::assertSame(201, $this->enrol($pdo, $token, Uuid::v4())->status);
+    }
+
+    private function renew(PDO $pdo, string $certPem, string $csr): Response
+    {
+        $req = Request::forTest('POST', '/api/v1/renew', ['Content-Type' => 'application/json'], (string) json_encode(['csr' => $csr]), $certPem, 'SUCCESS', self::ip());
+        return $this->api($pdo)->handle($req);
+    }
+
+    /** @return array<string, string> serial => status for the agent */
+    private static function certStates(PDO $pdo, string $agentId): array
+    {
+        $s = $pdo->prepare('SELECT c.serial_hex, c.status, c.issued_via FROM agent_certificates c JOIN agents a ON a.id = c.agent_pk WHERE a.agent_id = ? ORDER BY c.id');
+        $s->execute([$agentId]);
+        $out = [];
+        foreach ($s->fetchAll() as $r) {
+            $out[] = $r['issued_via'] . ':' . $r['status'];
+        }
+        return $out;
+    }
+
+    public function testRenewalGivesANewCertificateAndTheOldOneStillWorksUntilItExpires(): void
+    {
+        $pdo = $this->pdo();
+        $id = Uuid::v4();
+        $key = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => 'prime256v1']);
+        $first = $this->enrol($pdo, self::token($pdo), $id, ['csr' => self::csr($id, $key)]);
+        self::assertSame(201, $first->status);
+
+        // The same key again is refused (§2.6: a new key).
+        $same = $this->renew($pdo, $first->body['certificate'], self::csr($id, $key));
+        self::assertSame(400, $same->status);
+        self::assertSame('csr_invalid', self::code($same));
+        self::assertStringContainsString('reuses the key', $same->body['error']['message']);
+        // Another agent's CN is refused.
+        self::assertSame('csr_invalid', self::code($this->renew($pdo, $first->body['certificate'], self::csr(Uuid::v4()))));
+
+        $r = $this->renew($pdo, $first->body['certificate'], self::csr($id));
+        self::assertSame(200, $r->status, json_encode($r->body));
+        self::assertSame($id, $r->body['agent_id']);
+        self::assertSame('default', $r->body['host_group']);
+        self::assertNotSame($first->body['certificate'], $r->body['certificate']);
+        self::assertSame(1, openssl_x509_verify($r->body['certificate'], $r->body['ca_certificate']));
+        self::assertSame(30 * 86_400, strtotime($r->body['not_after']) - strtotime($r->body['renew_after']));
+        self::assertSame(['enroll:superseded', 'renew:valid'], self::certStates($pdo, $id));
+
+        $auth = new ClientCertAuth($pdo);
+        foreach ([$first, $r] as $resp) {
+            self::assertSame($id, $auth->authenticate(Request::forTest('POST', '/api/v1/heartbeat', [], '', $resp->body['certificate']))->agentId);
+        }
+
+        // A lost answer: the agent renews again with the old certificate.
+        $again = $this->renew($pdo, $first->body['certificate'], self::csr($id));
+        self::assertSame(200, $again->status);
+        self::assertSame(['enroll:superseded', 'renew:superseded', 'renew:valid'], self::certStates($pdo, $id));
+
+        $a = $pdo->prepare('SELECT COUNT(*) FROM audit_log WHERE action = \'agent_certificate_renewed\' AND target_id = ? AND details NOT LIKE \'%BEGIN%\'');
+        $a->execute([$id]);
+        self::assertSame(2, (int) $a->fetchColumn());
+    }
+
+    public function testRenewalNeedsAValidCertificateOfAnAgentThatIsNotRevoked(): void
+    {
+        $pdo = $this->pdo();
+        $id = Uuid::v4();
+        $first = $this->enrol($pdo, self::token($pdo), $id);
+        self::assertSame(201, $first->status);
+
+        $none = Request::forTest('POST', '/api/v1/renew', ['Content-Type' => 'application/json'], (string) json_encode(['csr' => self::csr($id)]));
+        self::assertSame(401, $this->api($pdo)->handle($none)->status);
+        self::assertSame('missing_field', self::code($this->renew($pdo, $first->body['certificate'], '')));
+
+        $pdo->prepare('UPDATE agents SET status = \'revoked\' WHERE agent_id = ?')->execute([$id]);
+        $revoked = $this->renew($pdo, $first->body['certificate'], self::csr($id));
+        self::assertSame(403, $revoked->status);
+        self::assertSame('agent_revoked', self::code($revoked));
+        self::assertSame(['enroll:valid'], self::certStates($pdo, $id));
     }
 }

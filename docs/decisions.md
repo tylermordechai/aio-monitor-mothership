@@ -531,3 +531,22 @@ Proposed in [ingest-api.md](ingest-api.md) and `db/migrations/0001_initial.sql`,
 - **The address limit:** every 400, 403, 409, 413 and 415 adds a row to `enrollment_failures`; at 10 in 10 minutes from one address, 429 `too_many_enrollments` with `Retry-After` until the oldest leaves the window. Settings `enrol.max_failures`, `enrol.failure_window_s`. Old rows are removed by the retention job (milestone 4).
 - **The signer down:** 500 `internal_error`, retryable; nothing committed, the token unused.
 - **`tools/enrol-check.php`** (run by 11): enrols a throwaway agent through the real API on 8443, sends a heartbeat with its certificate, checks the reused token (403) and a second token for the same ID (409), revokes it and checks its heartbeat is refused (403 `agent_revoked`), then deletes the agent, its host and its rows (group `setup-check`) and its own failure rows. Audit rows stay.
+
+### M-063 Ingest API contract v1.1: the agent's `undeliverable` file (detail only)
+**Requirements:** MS-ING-09, MS-ING-12, AG-DAT-04 · **Status:** Recorded 2026-11-27, from the agent's approved 5c plan (agent PD-67, D-087, D-088), passed on by the PM
+- **Why v1.1, not v2:** it only adds detail. No field, answer or rule a v1 agent relies on changes meaning, and the URLs stay `/api/v1`.
+- **§8.1 rule 7:** after 3 answers retrying can't fix for the same batch (400 `bad_gzip` or `empty_batch`, or an `acked_seq` that doesn't match), the agent splits the batch in half, as for 413, down to single lines. A single line that still fails goes to a local encrypted `undeliverable` file in the queue folder (cap 10 MB, a config value, D-088), is counted in the heartbeat, and gets a `coverage_gap` record with `reason: "undeliverable"`. When the file is full, the line is dropped with the same record. Nothing unacknowledged is deleted for any other reason; 429 and 5xx keep the backoff rules.
+- **§4:** the heartbeat gains `queue.undeliverable_records` (lines moved there since install) and `queue.undeliverable_bytes` (the file's size now). **The names are the mothership's proposal; the agent PM confirms them.** Until then, and for any other name, the value is kept in the heartbeat body like every unknown field.
+- **§9:** `coverage_gap` may carry `reason: "undeliverable"`. `coverage_gaps.reason` is free text (VARCHAR 64) and the host page shows it as sent, so ingest needs no change.
+- **The fleet table** shows the undeliverable count with the agent (M-059). It is built with milestone 3 step 8 (silent agents flagged), which changes the fleet table anyway: a column on `agents` filled by the heartbeat, like `queue_dropped_records`.
+
+### M-064 POST /api/v1/renew (milestone 3 step 4)
+**Requirements:** MS-ING-11, MS-SEC-02, MS-SEC-08, MS-SEC-10, M-018 · **Status:** Built 2026-11-27, waiting for the VM run
+- **Who:** the agent named by the client certificate in use (ClientCertAuth, MS-ING-02); a revoked certificate or agent gets 403 `agent_revoked`. The agent row and the certificate in use are locked in the transaction, so a revocation at the same moment is seen.
+- **The CSR:** the §2.3 checks with the agent's own ID as the CN, and **a new key**: the key of the certificate in use gets 400 `csr_invalid` (new reason `same_key`, "reuses the key of the certificate in use").
+- **The result:** the new certificate is added as `valid` (`issued_via = renew`), every other valid certificate of the agent becomes `superseded`. Superseded certificates still authenticate until they expire (§2.6), and can renew again, so a lost answer costs nothing. The answer has the §2.2 fields, with status 200.
+- **Audit:** `agent_certificate_renewed`, actor `agent:<agent ID>`, with the old and new serial and the number superseded; never the CSR or the certificate.
+- **The heartbeat's `renew_after`** (§4): null until the certificate in use is due (30 days before its expiry), then that due time. Before, it was always null.
+- **Shared code:** `CertIssue` (the JSON body, `csr_invalid`, sign and register, the answer), used by enrolment and renewal. Enrolment's behaviour is unchanged.
+- **Not limited:** how often an agent renews. Each renewal is audited and the per-agent request rate applies (§8.2). A health check for an agent renewing much more than once a year can come with milestone 4's health checks.
+- **`tools/enrol-check.php`** (run by 11) now also renews over 8443: the same key 400, a new key 200, both certificates working, and after the revocation both refused and no renewal.

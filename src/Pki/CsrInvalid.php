@@ -18,6 +18,8 @@ final class CsrInvalid extends \RuntimeException
         'key_type' => 'the key is not ECDSA',
         'curve' => 'the curve is not P-256 or P-384',
         'signature' => 'the CSR signature does not verify',
+        // Renewal only (§2.6, M-064): a renewal must bring a new key.
+        'same_key' => 'the CSR reuses the key of the certificate in use',
     ];
 
     public function __construct(public readonly string $reason)

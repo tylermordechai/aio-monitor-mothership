@@ -9,11 +9,13 @@
  *
  * Steps: a token in the host group "setup-check" → POST /api/v1/enroll with a
  * fresh P-256 key → 201 and a certificate that chains to the agent CA → a
- * heartbeat with it → the same token again (403) → a second token for the
- * same agent ID (409) → the agent revoked → its heartbeat refused (403
+ * heartbeat with it (renew_after null) → renewal (M-064): the same key 400, a
+ * new key 200, the renewed and the old certificate both working → the same
+ * token again (403) → a second token for the same agent ID (409) → the agent
+ * revoked → heartbeats with both certificates refused and no renewal (403
  * agent_revoked). Then every row of the "setup-check" group is deleted, with
- * this run's failure rows; the audit rows stay. The key lives only in a 700
- * temporary folder and is deleted. Prints PASS:/FAIL: lines; exit code 1 on
+ * this run's failure rows; the audit rows stay. The keys live only in a 700
+ * temporary folder and are deleted. Prints PASS:/FAIL: lines; exit code 1 on
  * any failure.
  */
 
@@ -113,6 +115,23 @@ try {
 
     [$st, $hb] = $post('/api/v1/heartbeat', '{"agent_time":"' . gmdate('Y-m-d\TH:i:s\Z') . '"}', "$work/agent.pem");
     $say($st === 200, "a heartbeat with the new certificate: 200 (got $st " . $code($hb) . ')');
+    $say($st === 200 && array_key_exists('renew_after', $hb) && $hb['renew_after'] === null, 'the heartbeat says no renewal is due yet (renew_after null)');
+
+    // Renewal (§2.6, M-064): a new key, the same CN, with the current certificate.
+    $key2 = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => 'prime256v1']);
+    $csr2 = openssl_csr_new(['commonName' => $agentId], $key2, ['digest_alg' => 'sha256']);
+    openssl_csr_export($csr2, $csr2Pem);
+    openssl_pkey_export($key2, $key2Pem);
+    [$st, $sameKey] = $post('/api/v1/renew', (string) json_encode(['csr' => $csrPem]), "$work/agent.pem");
+    $say($st === 400 && $code($sameKey) === 'csr_invalid', "renew with the same key: 400 csr_invalid (got $st " . $code($sameKey) . ')');
+    [$st, $rn] = $post('/api/v1/renew', (string) json_encode(['csr' => $csr2Pem]), "$work/agent.pem");
+    $say($st === 200 && ($rn['agent_id'] ?? '') === $agentId && openssl_x509_verify((string) ($rn['certificate'] ?? ''), $ca) === 1, "renew with a new key: 200 and a certificate from the agent CA (got $st " . $code($rn) . ')');
+    file_put_contents("$work/renewed.pem", ($rn['certificate'] ?? '') . $key2Pem);
+    chmod("$work/renewed.pem", 0600);
+    [$st] = $post('/api/v1/heartbeat', '{}', "$work/renewed.pem");
+    $say($st === 200, "a heartbeat with the renewed certificate: 200 (got $st)");
+    [$st] = $post('/api/v1/heartbeat', '{}', "$work/agent.pem");
+    $say($st === 200, "the old certificate still works until it expires (superseded): 200 (got $st)");
 
     [$st, $again] = $post('/api/v1/enroll', $enrolBody($token));
     $say($st === 403 && $code($again) === 'enrollment_token_invalid', "the same token again: 403 enrollment_token_invalid (got $st " . $code($again) . ')');
@@ -124,8 +143,12 @@ try {
 
     $pdo->prepare('UPDATE agents SET status = \'revoked\', revoked_at = ?, revoke_reason = ? WHERE agent_id = ?')
         ->execute([Time::nowDb(), 'tools/enrol-check.php', $agentId]);
-    [$st, $rv] = $post('/api/v1/heartbeat', '{}', "$work/agent.pem");
-    $say($st === 403 && $code($rv) === 'agent_revoked', "after revoking it, its heartbeat: 403 agent_revoked (got $st " . $code($rv) . ')');
+    foreach (['agent.pem' => 'old', 'renewed.pem' => 'renewed'] as $file => $which) {
+        [$st, $rv] = $post('/api/v1/heartbeat', '{}', "$work/$file");
+        $say($st === 403 && $code($rv) === 'agent_revoked', "after revoking it, a heartbeat with the $which certificate: 403 agent_revoked (got $st " . $code($rv) . ')');
+    }
+    [$st, $rv] = $post('/api/v1/renew', (string) json_encode(['csr' => $csr2Pem]), "$work/renewed.pem");
+    $say($st === 403 && $code($rv) === 'agent_revoked', "and it can't renew: 403 agent_revoked (got $st " . $code($rv) . ')');
 } catch (RuntimeException $e) {
     if ($e->getMessage() !== 'stop') {
         $say(false, 'error: ' . $e->getMessage());

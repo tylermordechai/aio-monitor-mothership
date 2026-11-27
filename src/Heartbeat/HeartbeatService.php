@@ -9,6 +9,7 @@ use Aio\Config;
 use Aio\Http\ApiError;
 use Aio\Http\Request;
 use Aio\Http\Response;
+use Aio\Pki\CertProfile;
 use Aio\Util\Time;
 use PDO;
 
@@ -110,9 +111,22 @@ final class HeartbeatService
             'server_time' => Time::rfc3339($now),
             'heartbeat_s' => $this->config->int('heartbeat', 'interval_s'),
             'config_etag' => $serverEtag === false ? null : (string) $serverEtag,
-            // Renewal (MS-ING-11) arrives with enrolment in milestone 3.
-            'renew_after' => null,
+            'renew_after' => self::renewAfter($agent->certNotAfter, $now),
         ]);
+    }
+
+    /**
+     * §4, M-064: the certificate in use is due for renewal (30 days before
+     * its expiry, §2.6): its renew_after time; otherwise null.
+     */
+    public static function renewAfter(string $certNotAfterDb, float $now): ?string
+    {
+        $notAfter = strtotime($certNotAfterDb . ' UTC');
+        if ($notAfter === false) {
+            return null;
+        }
+        $due = CertProfile::renewAfter($notAfter);
+        return $now >= $due ? Time::rfc3339($due) : null;
     }
 
     private static function uint(mixed $v): ?int
