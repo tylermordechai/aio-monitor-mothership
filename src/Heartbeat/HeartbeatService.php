@@ -98,11 +98,15 @@ final class HeartbeatService
         }
         $ins->execute();
 
+        // v1.1 (M-063): the agent's undeliverable file, for the fleet table.
+        $qUndel = self::uint($queue->undeliverable_records ?? null);
+        $qUndelBytes = self::uint($queue->undeliverable_bytes ?? null);
         $u = $this->pdo->prepare(
             'UPDATE agents SET last_heartbeat_at = ?, clock_skew_ms = ?, queue_records = ?, queue_bytes = ?,
-                    queue_oldest_ts = ?, queue_dropped_records = ?, config_etag = ? WHERE id = ?'
+                    queue_oldest_ts = ?, queue_dropped_records = ?, queue_undeliverable_records = ?,
+                    queue_undeliverable_bytes = ?, config_etag = ? WHERE id = ?'
         );
-        $u->execute([$nowDb, $skewMs, $qRecords, $qBytes, $qOldest, $qDropped, $etag, $agent->agentPk]);
+        $u->execute([$nowDb, $skewMs, $qRecords, $qBytes, $qOldest, $qDropped, $qUndel, $qUndelBytes, $etag, $agent->agentPk]);
 
         // The ETag GET /api/v1/config would answer with (§4, §5, M-065).
         $serverEtag = (new ConfigService($this->pdo, $this->config))->forGroup($agent->groupId)['etag'];

@@ -134,6 +134,8 @@ TOK=""
 grants() { mariadb -N -e "SHOW GRANTS FOR 'aio_ingest'@'localhost'"; }
 ingest_audit_insert_only() { local g; g=$(grants | grep '`audit_log`'); [[ "$g" == *"GRANT INSERT ON"* ]] && [[ "$g" != *SELECT* && "$g" != *UPDATE* && "$g" != *DELETE* ]]; }
 check "aio_ingest may only INSERT into audit_log (M-062; re-run 06 if not)" ingest_audit_insert_only
+mig6() { [[ $(db "SELECT COUNT(*) FROM schema_migrations WHERE version='0006_undeliverable'") == 1 ]]; }
+check "migration 0006 applied: the undeliverable count (M-063; re-run 06 if not)" mig6
 echo
 info "Enrolment through the agent API on 8443 (tools/enrol-check.php: one throwaway agent, removed after)"
 while IFS= read -r line; do

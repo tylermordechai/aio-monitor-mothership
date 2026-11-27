@@ -574,3 +574,15 @@ Proposed in [ingest-api.md](ingest-api.md) and `db/migrations/0001_initial.sql`,
 - **A reason is required** (1 to 500 characters) for each. Audit (MS-SEC-08): `agent_revoked`, `agent_unrevoked`, `certificate_revoked`, as "cli:<login>". `agents.revoked_by` (a dashboard user ID) stays NULL for the CLI; the audit row says who.
 - **The CRL** (MPD-41) isn't part of this; the database check is the authority and takes effect at once.
 - **`tools/enrol-check.php`** (run by 11) now revokes with `bin/agent.php` (refused without a reason), checks both certificates and renewal are refused, unrevokes, and checks the agent works again and both changes are audited. This is the first half of the milestone 3 gate ("revoked agent refused") on the real API.
+
+### M-067 Silent agents flagged, and the undeliverable count in the fleet (milestone 3 step 8)
+**Requirements:** MS-ING-08, MS-UI-01, MS-ALR-05, MS-ING-12, M-059, M-063 · **Status:** Built 2026-11-27, waiting for the VM run
+- **One rule for the fleet table, the host page and the map** (`AgentStatus`). Every authenticated request updates the check-in (ClientCertAuth), so "silent" means no request of any kind:
+  - **silent:** no check-in for `stale_after_s` (5 minutes, *(confirm)*, MS-ALR-05). The key stays `stale`; the label is now "silent".
+  - **checking in, ingest behind** (new): heartbeats arrive, records are queued, and no batch has been stored for `stale_after_s`: the §4 case "connected, 40 MB queued".
+  - **revoked** (new): the host's agent is revoked (M-066). Until now such a host showed "no agent".
+  - **no agent**, and **checking in**.
+- **The host's agent** is its active one, else its latest revoked one.
+- **The undeliverable count (M-063):** migration 0006 adds `agents.queue_undeliverable_records` and `queue_undeliverable_bytes`, filled by each heartbeat from `queue.undeliverable_records` and `queue.undeliverable_bytes` (names still to confirm with the agent PM). The fleet table has a column "Undeliverable, dropped" (both should be 0; a badge when not), the summary counts hosts with undeliverable lines, and the host page shows a badge.
+- **Alerts** for silent agents (MS-ALR-05) are milestone 7; this is the flag the gate asks for.
+- **`tools/enrol-check.php`** (run by 11) checks the gate's second half on the real system: the throwaway agent shows as checking in, is flagged silent after its check-in is set 10 minutes back, and a heartbeat clears the flag and shows its undeliverable count. With M-066, both halves of the milestone 3 gate are now checked in 11.

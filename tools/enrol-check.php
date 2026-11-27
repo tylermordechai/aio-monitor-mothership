@@ -177,6 +177,25 @@ try {
     $say($cli('unrevoke', $agentId, '--reason=tools/enrol-check.php') === 0, 'bin/agent.php unrevoke');
     [$st] = $post('/api/v1/heartbeat', '{}', "$work/renewed.pem");
     $say($st === 200, "after the unrevoke, its heartbeat: 200 again (got $st)");
+
+    // The gate's second half (M-067): a silent agent is flagged in the fleet.
+    $fleetStatus = static function () use ($pdo, $config, $agentId): ?array {
+        $s = $pdo->prepare('SELECT host_pk FROM agents WHERE agent_id = ?');
+        $s->execute([$agentId]);
+        $hostPk = (int) $s->fetchColumn();
+        foreach ((new Aio\Dashboard\FleetQuery($pdo, $config))->hosts() as $h) {
+            if ($h['host_pk'] === $hostPk) {
+                return $h;
+            }
+        }
+        return null;
+    };
+    $say(($fleetStatus()['status'] ?? '') === 'ok', 'the fleet shows it checking in');
+    $pdo->prepare('UPDATE agents SET last_checkin_at = UTC_TIMESTAMP(6) - INTERVAL 10 MINUTE WHERE agent_id = ?')->execute([$agentId]);
+    $say(($fleetStatus()['status'] ?? '') === 'stale', 'with no check-in for 10 minutes, the fleet flags it silent');
+    [$st] = $post('/api/v1/heartbeat', '{"queue":{"records":0,"undeliverable_records":2,"undeliverable_bytes":512}}', "$work/renewed.pem");
+    $f = $fleetStatus();
+    $say($st === 200 && ($f['status'] ?? '') === 'ok' && ($f['undeliverable_records'] ?? null) === 2, 'a heartbeat clears the flag, and the fleet shows its undeliverable count (2)');
     $au = $pdo->prepare('SELECT COUNT(*) FROM audit_log WHERE target_id = ? AND action IN (\'agent_revoked\', \'agent_unrevoked\') AND username LIKE \'cli:%\'');
     $au->execute([$agentId]);
     $say((int) $au->fetchColumn() === 2, 'the revoke and the unrevoke are in the audit log');

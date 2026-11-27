@@ -284,6 +284,7 @@ sudo bash setup/11-enrolment.sh 2>&1 | tee ~/setup-logs/11.log
 - **Renewal (M-064), in the same live run:** the throwaway agent renews over 8443. The same key is refused (400), a new key gets a new certificate (200), and both the renewed and the old certificate work until the revocation, after which both are refused and the agent can't renew.
 - **Config (M-065), in the same live run:** `GET /api/v1/config` gives the group's settings with an ETag equal to the heartbeat's `config_etag`, 304 with `If-None-Match`, and 401 without a certificate.
 - **Revoke and unrevoke (M-066), in the same live run:** the throwaway agent is revoked with `bin/agent.php` (refused without a reason), both its certificates and its renewal are refused, it is unrevoked and works again, and both changes are in the audit log.
+- **Silent agents (M-067), in the same live run:** the fleet shows the throwaway agent checking in, flags it silent once its check-in is 10 minutes old, and clears the flag on its next heartbeat, which also shows its undeliverable count. With the revoke checks above, both halves of the milestone 3 gate are checked.
 
 ### Enrolment tokens and the agent CA (M-021, M-061)
 

@@ -62,7 +62,7 @@
       line(info, 'OS', d.os || 'not reported yet');
       line(info, 'Agent', d.version);
       line(info, 'Last check-in (UTC)', (d.last_checkin || 'never') + ' (' + d.ago + ')');
-      line(info, 'Status', { ok: 'checking in', stale: 'stale', no_agent: 'no agent' }[d.status] || d.status);
+      line(info, 'Status', { ok: 'checking in', behind: 'checking in, ingest behind', stale: 'silent', revoked: 'revoked', no_agent: 'no agent' }[d.status] || d.status);
       line(info, 'Coverage gaps in this range', d.gaps);
       var p = document.createElement('p');
       p.className = 'muted';

@@ -62,12 +62,13 @@ final class HostQuery
     {
         $s = $this->pdo->prepare(
             "SELECT h.id, h.hostname, h.first_seen, h.retired_at, g.name AS grp,
-                    a.agent_id, a.last_checkin_at, UNIX_TIMESTAMP(a.last_checkin_at) AS checkin_epoch, a.last_version, a.queue_records, a.status AS agent_status
+                    a.agent_id, a.last_checkin_at, UNIX_TIMESTAMP(a.last_checkin_at) AS checkin_epoch, a.last_version, a.queue_records, a.status AS agent_status,
+                    UNIX_TIMESTAMP(a.last_ingest_at) AS ingest_epoch, a.queue_dropped_records, a.queue_undeliverable_records
                FROM hosts h
                JOIN host_groups g ON g.id = h.group_id
-               LEFT JOIN agents a ON a.host_pk = h.id AND a.status = 'active'
+               LEFT JOIN agents a ON a.host_pk = h.id AND a.status IN ('active', 'revoked')
               WHERE h.id = ?
-              ORDER BY a.id LIMIT 1"
+              ORDER BY a.status = 'active' DESC, a.id DESC LIMIT 1"
         );
         $s->execute([$hostPk]);
         $h = $s->fetch();
@@ -81,11 +82,14 @@ final class HostQuery
         $f->execute([$hostPk]);
         $facts = $f->fetch() ?: null;
         $ago = $h['checkin_epoch'] === null ? null : max(0, $now - (int) $h['checkin_epoch']);
-        $status = match (true) {
-            $h['agent_id'] === null => 'no_agent',
-            $ago === null || $ago > $config->int('dashboard', 'stale_after_s') => 'stale',
-            default => 'ok',
-        };
+        $status = AgentStatus::of(
+            $h['agent_id'] === null ? null : (string) $h['agent_status'],
+            $h['checkin_epoch'] === null ? null : (int) $h['checkin_epoch'],
+            $h['ingest_epoch'] === null ? null : (int) $h['ingest_epoch'],
+            $h['queue_records'] === null ? null : (int) $h['queue_records'],
+            $now,
+            $config->int('dashboard', 'stale_after_s'),
+        );
         $addresses = [];
         if (is_array($facts) && is_string($facts['interfaces'])) {
             foreach (json_decode($facts['interfaces'], true) ?: [] as $if) {
@@ -109,6 +113,8 @@ final class HostQuery
             'ago' => FleetQuery::ago($ago),
             'status' => $status,
             'queue_records' => $h['queue_records'],
+            'dropped_records' => $h['queue_dropped_records'],
+            'undeliverable_records' => $h['queue_undeliverable_records'],
             'facts' => $facts,
             'os' => $os,
             'kind' => $os !== null && stripos((string) $os, 'server') === false ? 'workstation' : 'server',

@@ -255,7 +255,7 @@ Request: `Content-Type: application/json`, body at most 64 KB. **No `agent_id` f
 | `queue.oldest_ts` | string or null | The `ts` of the oldest queued record |
 | `queue.dropped_records`, `queue.dropped_bytes` | integer | Dropped because the cap was hit, since install. Should be 0; anything else raises a coverage alert |
 | `queue.undeliverable_records` | integer | v1.1: lines moved to the `undeliverable` file since install (§8.1 rule 7). Should be 0; anything else is shown with the agent in the fleet table |
-| `queue.undeliverable_bytes` | integer | v1.1: the `undeliverable` file's size now (cap 10 MB, D-088) |
+| `queue.undeliverable_bytes` | integer | v1.1: the `undeliverable` file's size now (cap 10 MB, D-088). Both are kept on the agent and shown in the fleet table (M-067) |
 | `transport.last_acked_seq` | integer | The last `acked_seq` received |
 | `transport.last_success` | string or null | When the last ingest succeeded |
 | `transport.consecutive_failures` | integer | Ingest failures in a row |
