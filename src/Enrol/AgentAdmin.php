@@ -34,6 +34,7 @@ final class AgentAdmin
     public function list(?string $status = null, int $limit = 500): array
     {
         $sql = 'SELECT a.agent_id, a.status, h.hostname, g.name AS group_name, a.last_checkin_at, a.last_version,
+                       UNIX_TIMESTAMP(a.last_checkin_at) AS checkin_epoch, UNIX_TIMESTAMP(a.last_ingest_at) AS ingest_epoch, a.queue_records,
                        (SELECT COUNT(*) FROM agent_certificates c WHERE c.agent_pk = a.id AND c.status <> \'revoked\' AND c.not_after > UTC_TIMESTAMP(6)) AS usable_certs
                   FROM agents a JOIN hosts h ON h.id = a.host_pk JOIN host_groups g ON g.id = h.group_id'
             . ($status === null ? '' : ' WHERE a.status = ?')

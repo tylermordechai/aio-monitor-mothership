@@ -26,6 +26,7 @@ declare(strict_types=1);
 require dirname(__DIR__) . '/vendor/autoload.php';
 
 use Aio\Config;
+use Aio\Dashboard\AgentStatus;
 use Aio\Db;
 use Aio\Enrol\AgentAdmin;
 
@@ -85,10 +86,20 @@ try {
                 echo "no agents\n";
                 break;
             }
-            $fmt = "%-36s %-8s %-24s %-14s %-19s %-12s %s\n";
-            printf($fmt, 'agent ID', 'status', 'hostname', 'group', 'last check-in (UTC)', 'version', 'usable certs');
+            // "state" is the fleet table's (AgentStatus, M-067): silent, behind, revoked...
+            $stale = $config->int('dashboard', 'stale_after_s');
+            $fmt = "%-36s %-8s %-27s %-24s %-14s %-19s %-12s %s\n";
+            printf($fmt, 'agent ID', 'status', 'state', 'hostname', 'group', 'last check-in (UTC)', 'version', 'usable certs');
             foreach ($rows as $r) {
-                printf($fmt, $r['agent_id'], $r['status'], mb_strimwidth((string) $r['hostname'], 0, 24), mb_strimwidth((string) $r['group_name'], 0, 14), substr((string) $r['last_checkin_at'], 0, 19), (string) $r['last_version'], (string) $r['usable_certs']);
+                $state = AgentStatus::label(AgentStatus::of(
+                    (string) $r['status'] === 'replaced' ? null : (string) $r['status'],
+                    $r['checkin_epoch'] === null ? null : (int) $r['checkin_epoch'],
+                    $r['ingest_epoch'] === null ? null : (int) $r['ingest_epoch'],
+                    $r['queue_records'] === null ? null : (int) $r['queue_records'],
+                    time(),
+                    $stale,
+                ));
+                printf($fmt, $r['agent_id'], $r['status'], $state, mb_strimwidth((string) $r['hostname'], 0, 24), mb_strimwidth((string) $r['group_name'], 0, 14), substr((string) $r['last_checkin_at'], 0, 19), (string) $r['last_version'], (string) $r['usable_certs']);
             }
             break;
 

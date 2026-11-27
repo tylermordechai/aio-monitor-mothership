@@ -69,8 +69,8 @@ final class AgentSettings
 
     /**
      * @param array<string, mixed>|null $row the agent_config row (JSON columns as strings), null for none
-     * @param int $maxExclusions (confirm) MPD-44
-     * @param int $maxRedactionRules (confirm) MPD-44
+     * @param int $maxExclusions (confirm) M-068: PD-62 has no list limits
+     * @param int $maxRedactionRules (confirm) M-068: PD-62 has no list limits
      * @return array{config: array<string, mixed>, version: int, rejected: list<string>}
      */
     public static function build(?array $row, string $groupName, int $maxExclusions = 500, int $maxRedactionRules = 100): array

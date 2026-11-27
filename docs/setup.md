@@ -317,6 +317,31 @@ sudo php bin/agent.php revoke-cert <serial> --reason="key copied"   # one certif
 - A revoked agent is refused on its next request (403 `agent_revoked`). It keeps its queue and tries once an hour, so an unrevoke loses nothing.
 - Every change needs a reason and is in the audit log as "cli:<your login>".
 
+## The milestone 3 gate run (M-068)
+
+The gate: **a revoked agent is refused, and a silent agent is flagged**. Four simulated agents enrol for real, one is revoked and one stops.
+
+```bash
+cd /opt/aio-mothership && git pull --ff-only
+sudo bash setup/09-app.sh 2>&1 | tee ~/setup-logs/09.log | tail -n 8
+sudo php tools/dev-agents.php delete
+sudo php tools/dev-agents.php create 4                                   # "enrolled 4 simulated agents through .../api/v1/enroll"
+sudo php tools/simulator/simulate.php --agents=4 --laptops=2 --duration=120
+```
+
+Revoke SIM-0003, then run only the first three agents for 7 minutes, so SIM-0004 goes silent:
+
+```bash
+ID=$(sudo php bin/agent.php list | grep ' SIM-0003 ' | cut -d' ' -f1); echo "$ID"
+sudo php bin/agent.php revoke "$ID" --reason="milestone 3 gate"
+sudo php tools/simulator/simulate.php --agents=3 --laptops=1 --duration=420
+sudo php bin/agent.php list
+```
+
+- **Expected:** SIM-0001 and SIM-0002 "checking in", SIM-0003 "revoked", SIM-0004 "silent". The simulator's `by_status` shows 403s for SIM-0003's requests and 200s for the rest.
+- **The dashboard** shows the same in the fleet table and on the map.
+- **Afterwards:** `sudo php tools/dev-agents.php delete` removes the four agents; the audit rows stay.
+
 ## Milestone 5: 7 days of simulator data
 
 ```bash

@@ -1,16 +1,17 @@
 <?php
 
 /**
- * Simulated agents for milestone 2 (M-043, M-049). Root only, on the VM.
+ * Simulated agents (M-043, M-049, M-068). Root only, on the VM.
  *
- *   sudo php tools/dev-agents.php create 500   # hosts SIM-0001.., agents, certificates
+ *   sudo php tools/dev-agents.php create 500 [--url=https://192.168.0.191:8443]   # enrols SIM-0001..
  *   sudo php tools/dev-agents.php list
  *   sudo php tools/dev-agents.php delete       # every simulator row and file, nothing else
  *
- * Enrolment (MS-ING-06) only arrives in milestone 3, so this issues client
- * certificates straight from the agent CA (P-256, clientAuth, CN = agent ID,
- * 1 year: the profile of ingest-api.md §2.3) and registers them as enrolment
- * would. Every simulated host is in the host group "simulator", which is how
+ * Since milestone 3 step 10 (M-068) each simulated agent enrols like a real
+ * one (MS-ING-06): a one-time deployment token for its hostname (TokenStore),
+ * a P-256 key made here, and POST /api/v1/enroll over 8443, so the signing
+ * service issues its certificate. This tool no longer reads the CA key.
+ * Every simulated host is in the host group "simulator", which is how
  * `delete` finds them; it never touches another group.
  *
  * Keys and certificates go to /var/lib/aio-mothership/sim (700 root). They
@@ -23,24 +24,31 @@ require dirname(__DIR__) . '/vendor/autoload.php';
 
 use Aio\Config;
 use Aio\Db;
+use Aio\Enrol\TokenStore;
 use Aio\Ingest\Schema\TableMap;
 use Aio\Util\Time;
 use Aio\Util\Uuid;
 
 const SIM_DIR = '/var/lib/aio-mothership/sim';
-const CA_DIR = '/etc/aio-mothership/pki/agent-ca';
 const GROUP = 'simulator';
 
 if (posix_geteuid() !== 0) {
-    fwrite(STDERR, "run it with sudo (it reads the agent CA key)\n");
+    fwrite(STDERR, "run it with sudo (aio_maint credentials and the simulator folder)\n");
     exit(2);
 }
 $cmd = $argv[1] ?? '';
 $config = Config::load();
 $pdo = Db::connect($config->string('db', 'maint_cnf'), $config->string('db', 'name'));
+$ca = $config->string('enrol', 'agent_ca_public');
+$url = 'https://' . trim((string) shell_exec('. ' . escapeshellarg(dirname(__DIR__) . '/setup/env.sh') . ' && echo $AIO_IP')) . ':8443';
+foreach (array_slice($argv, 2) as $a) {
+    if (str_starts_with($a, '--url=')) {
+        $url = rtrim(substr($a, 6), '/');
+    }
+}
 
 match ($cmd) {
-    'create' => create($pdo, max(1, (int) ($argv[2] ?? 10))),
+    'create' => create($pdo, max(1, (int) ($argv[2] ?? 10)), $url, $ca),
     'list' => listAgents($pdo),
     'delete' => deleteAll($pdo),
     default => usage(),
@@ -48,7 +56,7 @@ match ($cmd) {
 
 function usage(): never
 {
-    fwrite(STDERR, "usage: sudo php tools/dev-agents.php create N | list | delete\n");
+    fwrite(STDERR, "usage: sudo php tools/dev-agents.php create N [--url=https://IP:8443] | list | delete\n");
     exit(2);
 }
 
@@ -61,69 +69,79 @@ function groupId(PDO $pdo): int
     return (int) $s->fetchColumn();
 }
 
-function create(PDO $pdo, int $n): void
+function create(PDO $pdo, int $n, string $url, string $ca): void
 {
-    $gid = groupId($pdo);
-    // The default group's settings, so heartbeats get a config ETag.
-    $pdo->prepare("INSERT IGNORE INTO agent_config (group_id, settings, etag, updated_at) VALUES (?, '{}', '\"cfg-sim-1\"', ?)")
-        ->execute([$gid, Time::nowDb()]);
+    groupId($pdo);
     @mkdir(SIM_DIR . '/certs', 0700, true);
     chmod(SIM_DIR, 0700);
     $list = is_file(SIM_DIR . '/agents.json') ? json_decode((string) file_get_contents(SIM_DIR . '/agents.json'), true) : [];
     $have = count($list);
-    $caCert = (string) file_get_contents(CA_DIR . '/ca.crt');
-    $caKey = openssl_pkey_get_private((string) file_get_contents(CA_DIR . '/ca.key'));
-    if ($caKey === false) {
-        fwrite(STDERR, "can't read the agent CA key\n");
-        exit(1);
-    }
-    $extFile = tempnam(sys_get_temp_dir(), 'aio-ext');
-    file_put_contents($extFile, "[req]\ndistinguished_name=dn\n[dn]\n[v3_client]\nbasicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature\nextendedKeyUsage=clientAuth\nsubjectKeyIdentifier=hash\nauthorityKeyIdentifier=keyid\n");
-    $pdo->beginTransaction();
-    for ($i = $have + 1; $i <= $have + $n; $i++) {
-        $hostname = sprintf('SIM-%04d', $i);
-        $agentId = Uuid::v4();
-        $guid = Uuid::v4();
-        $now = Time::nowDb();
-        $pdo->prepare('INSERT INTO hosts (machine_guid, hostname, group_id, first_seen) VALUES (?, ?, ?, ?)')->execute([$guid, $hostname, $gid, $now]);
-        $hostPk = (int) $pdo->lastInsertId();
-        $pdo->prepare('INSERT INTO host_names (host_pk, hostname, first_seen, last_seen) VALUES (?, ?, ?, ?)')->execute([$hostPk, $hostname, $now, $now]);
-        $pdo->prepare('INSERT INTO agents (agent_id, host_pk, enrolled_at) VALUES (?, ?, ?)')->execute([$agentId, $hostPk, $now]);
-        $agentPk = (int) $pdo->lastInsertId();
-
-        $key = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => 'prime256v1']);
-        $csr = openssl_csr_new(['commonName' => $agentId], $key, ['digest_alg' => 'sha256', 'config' => $extFile]);
-        $serial = random_int(1, PHP_INT_MAX);
-        $x509 = openssl_csr_sign($csr, $caCert, $caKey, 365, ['digest_alg' => 'sha384', 'x509_extensions' => 'v3_client', 'config' => $extFile], $serial);
-        if ($x509 === false) {
-            $pdo->rollBack();
-            fwrite(STDERR, 'signing failed: ' . openssl_error_string() . "\n");
-            exit(1);
+    $store = new TokenStore($pdo);
+    $made = 0;
+    try {
+        for ($i = $have + 1; $i <= $have + $n; $i++) {
+            $hostname = sprintf('SIM-%04d', $i);
+            $agentId = Uuid::v4();
+            $guid = Uuid::v4();
+            // M-068: like a real agent, a one-time token for this host, a key
+            // made here and a CSR, through POST /api/v1/enroll (§2).
+            $token = $store->create(['kind' => 'deployment', 'days' => '1', 'group' => GROUP, 'hostname' => $hostname, 'note' => 'tools/dev-agents.php'], 'cli:dev-agents')['token'];
+            $key = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => 'prime256v1']);
+            $csr = openssl_csr_new(['commonName' => $agentId], $key, ['digest_alg' => 'sha256']);
+            openssl_csr_export($csr, $csrPem);
+            openssl_pkey_export($key, $keyPem);
+            [$status, $body] = enrol($url, $ca, [
+                'enrollment_token' => $token,
+                'csr' => $csrPem,
+                'agent_id' => $agentId,
+                'host_id' => $guid,
+                'hostname' => $hostname,
+                'agent_version' => '0.5.0-sim',
+            ]);
+            if ($status !== 201 || !is_string($body['certificate'] ?? null)) {
+                throw new RuntimeException("enrolment of $hostname answered $status " . (string) ($body['error']['code'] ?? ''));
+            }
+            $base = SIM_DIR . "/certs/$agentId";
+            file_put_contents("$base.key", $keyPem);
+            chmod("$base.key", 0600);
+            file_put_contents("$base.crt", $body['certificate']);
+            $list[] = ['n' => $i, 'agent_id' => $agentId, 'host_id' => $guid, 'hostname' => $hostname, 'cert' => "$base.crt", 'key' => "$base.key"];
+            $made++;
+            if ($made % 50 === 0) {
+                echo "  enrolled $made of $n\n";
+            }
         }
-        openssl_x509_export($x509, $certPem);
-        openssl_pkey_export($key, $keyPem);
-        $info = openssl_x509_parse($certPem);
-        $s = $pdo->prepare("INSERT INTO agent_certificates (agent_pk, serial_hex, fingerprint_sha256, not_before, not_after, issued_at, issued_via)
-                            VALUES (?, ?, ?, FROM_UNIXTIME(?), FROM_UNIXTIME(?), ?, 'enroll')");
-        $s->bindValue(1, $agentPk, PDO::PARAM_INT);
-        $s->bindValue(2, strtoupper(dechex($serial)));
-        $s->bindValue(3, openssl_x509_fingerprint($certPem, 'sha256', true), PDO::PARAM_LOB);
-        $s->bindValue(4, $info['validFrom_time_t'], PDO::PARAM_INT);
-        $s->bindValue(5, $info['validTo_time_t'], PDO::PARAM_INT);
-        $s->bindValue(6, $now);
-        $s->execute();
-
-        $base = SIM_DIR . "/certs/$agentId";
-        file_put_contents("$base.crt", $certPem);
-        file_put_contents("$base.key", $keyPem);
-        chmod("$base.key", 0600);
-        $list[] = ['n' => $i, 'agent_id' => $agentId, 'host_id' => $guid, 'hostname' => $hostname, 'cert' => "$base.crt", 'key' => "$base.key"];
+    } finally {
+        file_put_contents(SIM_DIR . '/agents.json', json_encode($list, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+        chmod(SIM_DIR . '/agents.json', 0600);
     }
-    $pdo->commit();
-    unlink($extFile);
-    file_put_contents(SIM_DIR . '/agents.json', json_encode($list, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
-    chmod(SIM_DIR . '/agents.json', 0600);
-    echo "created $n simulated agents (" . count($list) . " in total), group '" . GROUP . "'\n";
+    echo "enrolled $made simulated agents through $url/api/v1/enroll (" . count($list) . " in total), group '" . GROUP . "'\n";
+}
+
+/**
+ * @param array<string, string> $body
+ * @return array{0: int, 1: array<string, mixed>}
+ */
+function enrol(string $url, string $ca, array $body): array
+{
+    $h = curl_init($url . '/api/v1/enroll');
+    curl_setopt_array($h, [
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => (string) json_encode($body),
+        CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'User-Agent: aio-monitor-agent/0.5.0-sim', 'Expect:'],
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CAINFO => $ca,
+        CURLOPT_SSLVERSION => CURL_SSLVERSION_TLSv1_3,
+        CURLOPT_TIMEOUT => 30,
+        CURLOPT_CONNECTTIMEOUT => 10,
+    ]);
+    $out = curl_exec($h);
+    $status = (int) curl_getinfo($h, CURLINFO_RESPONSE_CODE);
+    if ($out === false) {
+        throw new RuntimeException('enrol request failed: ' . curl_error($h));
+    }
+    $d = json_decode((string) $out, true);
+    return [$status, is_array($d) ? $d : []];
 }
 
 function listAgents(PDO $pdo): void
@@ -142,6 +160,8 @@ function deleteAll(PDO $pdo): void
     $hosts = array_values(array_unique(array_map('intval', array_column($rows, 'host_pk'))));
     if ($agents !== []) {
         $in = implode(',', $agents);
+        // Enrolment tokens stay, as a record, without the link to the agent (M-068).
+        $pdo->exec("UPDATE enrollment_tokens SET used_by_agent_pk = NULL WHERE used_by_agent_pk IN ($in)");
         foreach (TableMap::tables() as $t) {
             if (in_array($t, ['agents', 'agent_certificates', 'enrollment_tokens'], true)) {
                 continue;
