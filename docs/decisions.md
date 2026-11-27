@@ -564,3 +564,13 @@ Proposed in [ingest-api.md](ingest-api.md) and `db/migrations/0001_initial.sql`,
 - **ETag:** `"cfg-<group id>-<config_version>-<12 hex>"`, the hex a SHA-256 of what is served (without `generated_at`). It changes when the defaults change, not only when the row does. `If-None-Match` with it gets 304 and no body. **The heartbeat now answers with the same computed ETag**; the `etag` column of `agent_config` isn't used for serving.
 - **List limits** the contract doesn't give: 500 exclusions and 100 redaction rules, config defaults marked *(confirm)* (MPD-44).
 - **`tools/enrol-check.php`** (run by 11) now also fetches the config over 8443: 200 with the group's settings, the ETag equal to the heartbeat's, 304 with `If-None-Match`, 401 without a certificate.
+
+### M-066 Revoke and unrevoke (milestone 3 step 6)
+**Requirements:** MS-SEC-02, MS-SEC-08, M-003 · **Status:** Built 2026-11-27, waiting for the VM run
+- **`bin/agent.php list | show | revoke | unrevoke | revoke-cert`**, run with sudo as `aio_maint` (M-036). The logic is in `AgentAdmin`, for the admin page later (MPD-40).
+- **Revoke an agent:** `agents.status = revoked` with the time and reason. Every request with any of its certificates gets 403 `agent_revoked` from then on, because ClientCertAuth checks on every request (§2.4); its agent ID can't enrol again (§2.5). The agent keeps its queue and tries once an hour (§8.1 rule 8). The certificates' own status doesn't change, so an unrevoke restores them as they were.
+- **Unrevoke:** for a mistake. The agent is active again; its certificates that aren't revoked themselves work again and it sends its queue. The audit row keeps the earlier revocation's time and reason.
+- **Revoke a certificate:** final, no unrevoke. The agent stays active and can go on with another valid or superseded certificate, or needs a re-enrolment token.
+- **A reason is required** (1 to 500 characters) for each. Audit (MS-SEC-08): `agent_revoked`, `agent_unrevoked`, `certificate_revoked`, as "cli:<login>". `agents.revoked_by` (a dashboard user ID) stays NULL for the CLI; the audit row says who.
+- **The CRL** (MPD-41) isn't part of this; the database check is the authority and takes effect at once.
+- **`tools/enrol-check.php`** (run by 11) now revokes with `bin/agent.php` (refused without a reason), checks both certificates and renewal are refused, unrevokes, and checks the agent works again and both changes are audited. This is the first half of the milestone 3 gate ("revoked agent refused") on the real API.

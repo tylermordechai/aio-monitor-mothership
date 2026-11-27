@@ -12,8 +12,9 @@
  * heartbeat with it (renew_after null) → renewal (M-064): the same key 400, a
  * new key 200, the renewed and the old certificate both working → the same
  * token again (403) → a second token for the same agent ID (409) → the agent
- * revoked → heartbeats with both certificates refused and no renewal (403
- * agent_revoked). Then every row of the "setup-check" group is deleted, with
+ * revoked with bin/agent.php (M-066) → heartbeats with both certificates
+ * refused and no renewal (403 agent_revoked) → unrevoked → its heartbeat
+ * works again. Then every row of the "setup-check" group is deleted, with
  * this run's failure rows; the audit rows stay. The keys live only in a 700
  * temporary folder and are deleted. Prints PASS:/FAIL: lines; exit code 1 on
  * any failure.
@@ -160,14 +161,25 @@ try {
     $say($st === 409 && $code($dup) === 'agent_id_in_use', "a new token for the same agent ID: 409 agent_id_in_use (got $st " . $code($dup) . ')');
     $store->cancel($second['id'], 'cli:enrol-check');
 
-    $pdo->prepare('UPDATE agents SET status = \'revoked\', revoked_at = ?, revoke_reason = ? WHERE agent_id = ?')
-        ->execute([Time::nowDb(), 'tools/enrol-check.php', $agentId]);
+    // Revoke and unrevoke with bin/agent.php, as an admin would (M-066).
+    $cli = static function (string ...$a): int {
+        exec(implode(' ', array_map('escapeshellarg', [PHP_BINARY, dirname(__DIR__) . '/bin/agent.php', ...$a])) . ' 2>&1', $out, $rc);
+        return $rc;
+    };
+    $say($cli('revoke', $agentId) !== 0, 'bin/agent.php revoke without a reason is refused');
+    $say($cli('revoke', $agentId, '--reason=tools/enrol-check.php') === 0, 'bin/agent.php revoke');
     foreach (['agent.pem' => 'old', 'renewed.pem' => 'renewed'] as $file => $which) {
         [$st, $rv] = $post('/api/v1/heartbeat', '{}', "$work/$file");
         $say($st === 403 && $code($rv) === 'agent_revoked', "after revoking it, a heartbeat with the $which certificate: 403 agent_revoked (got $st " . $code($rv) . ')');
     }
     [$st, $rv] = $post('/api/v1/renew', (string) json_encode(['csr' => $csr2Pem]), "$work/renewed.pem");
     $say($st === 403 && $code($rv) === 'agent_revoked', "and it can't renew: 403 agent_revoked (got $st " . $code($rv) . ')');
+    $say($cli('unrevoke', $agentId, '--reason=tools/enrol-check.php') === 0, 'bin/agent.php unrevoke');
+    [$st] = $post('/api/v1/heartbeat', '{}', "$work/renewed.pem");
+    $say($st === 200, "after the unrevoke, its heartbeat: 200 again (got $st)");
+    $au = $pdo->prepare('SELECT COUNT(*) FROM audit_log WHERE target_id = ? AND action IN (\'agent_revoked\', \'agent_unrevoked\') AND username LIKE \'cli:%\'');
+    $au->execute([$agentId]);
+    $say((int) $au->fetchColumn() === 2, 'the revoke and the unrevoke are in the audit log');
 } catch (RuntimeException $e) {
     if ($e->getMessage() !== 'stop') {
         $say(false, 'error: ' . $e->getMessage());

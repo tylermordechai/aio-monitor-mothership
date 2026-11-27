@@ -283,6 +283,7 @@ sudo bash setup/11-enrolment.sh 2>&1 | tee ~/setup-logs/11.log
 - **The enrol endpoint (M-062), checked by 11:** the ingest database user may only add audit rows. Then `tools/enrol-check.php` enrols a throwaway agent (`AIO-ENROL-CHECK`, group `setup-check`) through the real API on 8443, sends a heartbeat with its new certificate, checks that the used token is refused (403) and that a second token for the same agent ID gets 409, revokes the agent and checks its heartbeat is refused (403 `agent_revoked`), then deletes the agent, its host and its rows. The audit rows of the run stay.
 - **Renewal (M-064), in the same live run:** the throwaway agent renews over 8443. The same key is refused (400), a new key gets a new certificate (200), and both the renewed and the old certificate work until the revocation, after which both are refused and the agent can't renew.
 - **Config (M-065), in the same live run:** `GET /api/v1/config` gives the group's settings with an ETag equal to the heartbeat's `config_etag`, 304 with `If-None-Match`, and 401 without a certificate.
+- **Revoke and unrevoke (M-066), in the same live run:** the throwaway agent is revoked with `bin/agent.php` (refused without a reason), both its certificates and its renewal are refused, it is unrevoked and works again, and both changes are in the audit log.
 
 ### Enrolment tokens and the agent CA (M-021, M-061)
 
@@ -300,6 +301,20 @@ php bin/agent-ca.php --sha256
 
 - The token is shown once and only its SHA-256 is stored. With `> token.txt`, only the token goes into the file and the details stay on the screen. Treat a token like a password until it is used or expires; delete `token.txt` when the installer has it.
 - Every create and cancel is in the audit log as "cli:<your login>", without the token.
+
+### Revoking an agent (M-066)
+
+```bash
+sudo php bin/agent.php list                     # every agent: status, host, group, last check-in
+sudo php bin/agent.php list --status=revoked
+sudo php bin/agent.php show <agent ID>           # the agent and its certificates
+sudo php bin/agent.php revoke <agent ID> --reason="lost laptop, ticket 123"
+sudo php bin/agent.php unrevoke <agent ID> --reason="revoked by mistake"
+sudo php bin/agent.php revoke-cert <serial> --reason="key copied"   # one certificate, for good
+```
+
+- A revoked agent is refused on its next request (403 `agent_revoked`). It keeps its queue and tries once an hour, so an unrevoke loses nothing.
+- Every change needs a reason and is in the audit log as "cli:<your login>".
 
 ## Milestone 5: 7 days of simulator data
 
