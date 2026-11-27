@@ -76,6 +76,12 @@ final class Config
             'max_failures' => 10,
             'failure_window_s' => 600,
         ],
+        // GET /api/v1/config (M-065). (confirm) MPD-44: list limits the
+        // contract doesn't give; the detection list's 100 entries / 64 KB are in §5.1.
+        'agent_config' => [
+            'max_exclusions' => 500,
+            'max_redaction_rules' => 100,
+        ],
         'heartbeat' => [
             'interval_s' => 60,
             'max_bytes' => 65_536,

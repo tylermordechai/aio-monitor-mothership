@@ -272,7 +272,7 @@ Every field is optional. Unknown fields are accepted and kept with the heartbeat
 {"server_time":"2026-11-14T10:00:00Z","heartbeat_s":60,"config_etag":"\"cfg-3-7\"","renew_after":null}
 ```
 
-- `config_etag`: if it differs from the agent's, the agent fetches `/api/v1/config`.
+- `config_etag`: the ETag `/api/v1/config` would answer with now (§5); if it differs from the agent's, the agent fetches `/api/v1/config`.
 - `renew_after`: null until the certificate in use is due (30 days before its `not_after`); from then on, that due time (§2.6, M-064).
 - `heartbeat_s`: the interval to use.
 
@@ -283,6 +283,11 @@ Each heartbeat updates the agent's check-in time, version and IP (MS-ING-08) and
 **Read-only for the agent.** It only changes agent settings, never the host (AG-SEC-07). With `If-None-Match` equal to the current ETag, the answer is `304 Not Modified` with no body.
 
 **When the agent fetches it:** at start, when a heartbeat's `config_etag` differs, and every 15 minutes (M-030) as a backstop. If a setting is missing or invalid, the agent keeps its built-in default for it (AG-CFG-02) and reports the problem in its heartbeat `health`.
+
+**On the mothership (M-065):**
+- **Checked when served, not only when saved:** every number against the agent's own bounds (agent PD-62); a value out of bounds, of the wrong type or unknown is replaced by the default. A detection entry, exclusion or redaction rule that fails its rule is left out. What was left out is logged by place and reason, never by value.
+- **A group with no stored settings** gets the defaults below, with `config_version` 0.
+- **The ETag** is `"cfg-<group id>-<config_version>-<12 hex digits>"`, the hex being a hash of what is served (without `generated_at`). So it also changes when the built-in defaults change. The heartbeat answers with the same ETag. The agent compares ETags only for equality.
 
 **200 OK**, with an `ETag` header:
 

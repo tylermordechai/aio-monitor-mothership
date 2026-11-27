@@ -230,7 +230,8 @@ final class IngestTest extends TestCase
         $r = (new HeartbeatService($this->pdo, Config::fromArray([])))->handle($req, $agent);
         self::assertSame(200, $r->status);
         self::assertSame(60, $r->body['heartbeat_s']);
-        self::assertSame('"cfg-1-1"', $r->body['config_etag']);
+        // The ETag the config endpoint gives for the agent's group (M-065).
+        self::assertMatchesRegularExpression('/^"cfg-\d+-1-[0-9a-f]{12}"$/', $r->body['config_etag']);
         $hb = $this->pdo->query('SELECT queue_records, last_acked_seq, body FROM agent_heartbeats WHERE agent_pk = ' . $this->a['agent_pk'])->fetch();
         self::assertSame(120, (int) $hb['queue_records']);
         self::assertSame(77, (int) $hb['last_acked_seq']);

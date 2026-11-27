@@ -35,6 +35,10 @@ final class Response
         foreach ($this->headers as $k => $v) {
             header("$k: $v");
         }
+        if ($this->status === 304) {
+            // Not Modified has no body (§5).
+            return;
+        }
         echo json_encode($this->body, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) . "\n";
     }
 }

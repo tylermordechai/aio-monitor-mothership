@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Aio\Heartbeat;
 
+use Aio\AgentConfig\ConfigService;
 use Aio\Auth\AgentContext;
 use Aio\Config;
 use Aio\Http\ApiError;
@@ -103,14 +104,13 @@ final class HeartbeatService
         );
         $u->execute([$nowDb, $skewMs, $qRecords, $qBytes, $qOldest, $qDropped, $etag, $agent->agentPk]);
 
-        $cfg = $this->pdo->prepare('SELECT etag FROM agent_config WHERE group_id = ?');
-        $cfg->execute([$agent->groupId]);
-        $serverEtag = $cfg->fetchColumn();
+        // The ETag GET /api/v1/config would answer with (§4, §5, M-065).
+        $serverEtag = (new ConfigService($this->pdo, $this->config))->forGroup($agent->groupId)['etag'];
 
         return new Response(200, [
             'server_time' => Time::rfc3339($now),
             'heartbeat_s' => $this->config->int('heartbeat', 'interval_s'),
-            'config_etag' => $serverEtag === false ? null : (string) $serverEtag,
+            'config_etag' => $serverEtag,
             'renew_after' => self::renewAfter($agent->certNotAfter, $now),
         ]);
     }

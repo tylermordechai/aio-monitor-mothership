@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Aio\Api;
 
+use Aio\AgentConfig\ConfigService;
 use Aio\Auth\ClientCertAuth;
 use Aio\Enrol\EnrolService;
 use Aio\Enrol\RenewService;
@@ -23,7 +24,7 @@ use PDO;
 
 /**
  * The agent API on 8443 (ingest-api.md §1). Milestone 2 serves ingest and the
- * heartbeat (M-043); milestone 3 adds enrol (M-062) and renew (M-064), then config.
+ * heartbeat (M-043); milestone 3 adds enrol (M-062), renew (M-064) and config (M-065).
  *
  * Errors use the §7 shape. Logs name the error class and code only, never
  * request content, tokens or keys (MS-SEC-10).
@@ -35,6 +36,7 @@ final class AgentApi
         '/api/v1/heartbeat' => 'POST',
         '/api/v1/enroll' => 'POST',
         '/api/v1/renew' => 'POST',
+        '/api/v1/config' => 'GET',
     ];
 
     /**
@@ -117,6 +119,8 @@ final class AgentApi
                 '/api/v1/ingest' => (new IngestService($pdo, $this->config))->handle($req, $agent),
                 // §2.6, M-064: a new certificate for the agent the current one names.
                 '/api/v1/renew' => (new RenewService($pdo, $this->signer(), $this->caPem()))->handle($req, $agent),
+                // §5, M-065: read-only, the settings of the agent's group.
+                '/api/v1/config' => (new ConfigService($pdo, $this->config))->handle($req, $agent),
                 default => (new HeartbeatService($pdo, $this->config))->handle($req, $agent),
             };
         } catch (ApiError $e) {

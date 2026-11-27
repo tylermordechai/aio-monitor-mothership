@@ -49,31 +49,40 @@ $say = static function (bool $ok, string $what) use (&$fails): bool {
     return $ok;
 };
 
-/** @return array{0: int, 1: array<string, mixed>} status and decoded body */
-$post = static function (string $path, string $json, ?string $certFile = null) use ($base, $caFile): array {
+/**
+ * @param array<string, string> $headers extra request headers
+ * @return array{0: int, 1: array<string, mixed>, 2: array<string, string>} status, decoded body, response headers (lower-case names)
+ */
+$request = static function (string $method, string $path, ?string $json, ?string $certFile, array $headers = []) use ($base, $caFile): array {
     $ssl = ['verify_peer' => true, 'verify_peer_name' => true, 'cafile' => $caFile, 'peer_name' => (string) parse_url($base, PHP_URL_HOST)];
     if ($certFile !== null) {
         $ssl['local_cert'] = $certFile;
     }
-    $ctx = stream_context_create([
-        'http' => [
-            'method' => 'POST',
-            'header' => "Content-Type: application/json\r\nUser-Agent: aio-monitor-agent/0.0.0-setup-check\r\n",
-            'content' => $json,
-            'ignore_errors' => true,
-            'timeout' => 20,
-        ],
-        'ssl' => $ssl,
-    ]);
-    $body = @file_get_contents($base . $path, false, $ctx);
+    $h = "User-Agent: aio-monitor-agent/0.0.0-setup-check\r\n" . ($json !== null ? "Content-Type: application/json\r\n" : '');
+    foreach ($headers as $k => $v) {
+        $h .= "$k: $v\r\n";
+    }
+    $http = ['method' => $method, 'header' => $h, 'ignore_errors' => true, 'timeout' => 20];
+    if ($json !== null) {
+        $http['content'] = $json;
+    }
+    $body = @file_get_contents($base . $path, false, stream_context_create(['http' => $http, 'ssl' => $ssl]));
     $status = 0;
-    foreach ($http_response_header ?? [] as $h) {
-        if (preg_match('#^HTTP/\S+ (\d{3})#', $h, $m)) {
+    $out = [];
+    foreach ($http_response_header ?? [] as $line) {
+        if (preg_match('#^HTTP/\S+ (\d{3})#', $line, $m)) {
             $status = (int) $m[1];
+        } elseif (preg_match('/^([^:]+):\s*(.*)$/', $line, $m)) {
+            $out[strtolower($m[1])] = trim($m[2]);
         }
     }
     $d = is_string($body) ? json_decode($body, true) : null;
-    return [$status, is_array($d) ? $d : []];
+    return [$status, is_array($d) ? $d : [], $out];
+};
+/** @return array{0: int, 1: array<string, mixed>} */
+$post = static function (string $path, string $json, ?string $certFile = null) use ($request): array {
+    [$st, $b] = $request('POST', $path, $json, $certFile);
+    return [$st, $b];
 };
 $code = static fn (array $b): string => (string) ($b['error']['code'] ?? '');
 
@@ -116,6 +125,16 @@ try {
     [$st, $hb] = $post('/api/v1/heartbeat', '{"agent_time":"' . gmdate('Y-m-d\TH:i:s\Z') . '"}', "$work/agent.pem");
     $say($st === 200, "a heartbeat with the new certificate: 200 (got $st " . $code($hb) . ')');
     $say($st === 200 && array_key_exists('renew_after', $hb) && $hb['renew_after'] === null, 'the heartbeat says no renewal is due yet (renew_after null)');
+
+    // The agent's settings (§5, M-065).
+    [$st, $cfg, $ch] = $request('GET', '/api/v1/config', null, "$work/agent.pem");
+    $etag = $ch['etag'] ?? '';
+    $say($st === 200 && ($cfg['host_group'] ?? '') === GROUP && isset($cfg['intervals']['heartbeat_s'], $cfg['server_software']['detection_list']), "config: 200 with the group's settings (got $st " . $code($cfg) . ')');
+    $say($etag !== '' && $etag === ($hb['config_etag'] ?? null), 'its ETag is the one the heartbeat gave');
+    [$st, , $ch304] = $request('GET', '/api/v1/config', null, "$work/agent.pem", ['If-None-Match' => $etag]);
+    $say($st === 304 && ($ch304['etag'] ?? '') === $etag, "config with If-None-Match: 304 Not Modified (got $st)");
+    [$st] = $request('GET', '/api/v1/config', null, null);
+    $say($st === 401, "config without a certificate: 401 (got $st)");
 
     // Renewal (§2.6, M-064): a new key, the same CN, with the current certificate.
     $key2 = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => 'prime256v1']);

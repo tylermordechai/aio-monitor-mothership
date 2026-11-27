@@ -1,11 +1,11 @@
 # Pending decisions
 
-Last updated: 2026-11-24 (MPD-42 answered, M-062)
+Last updated: 2026-11-27 (MPD-44 added, M-065)
 
 Every *(confirm)* value and open question still open, each with a recommendation. To answer, reply with the ID and your choice, for example "MPD-32: keep". Answers are recorded in [decisions.md](decisions.md) and removed from here.
 
 - **Answered:** MPD-01 to MPD-34, recorded as M-017 to M-041; MPD-36, recorded as M-050; MPD-42, recorded as M-062.
-- **Open:** MPD-35 (the default is in the code), MPD-37 (later), MPD-38 (before the pilot), MPD-39 (when the agent's 5d formats are final), and MPD-40, MPD-41 and MPD-43 (milestone 3).
+- **Open:** MPD-35 (the default is in the code), MPD-37 (later), MPD-38 (before the pilot), MPD-39 (when the agent's 5d formats are final), and MPD-40, MPD-41, MPD-43 and MPD-44 (milestone 3).
 
 ### MPD-35 How much one simulated server produces
 - **Context:** MS-DAT-06 (MB per host per day) and the load test depend on the simulator's volume per host (`src/Sim/Profile.php`, M-049). The defaults are estimates.
@@ -45,6 +45,11 @@ Every *(confirm)* value and open question still open, each with a recommendation
 ### MPD-43 Config editing later
 - **Context:** `GET /api/v1/config` (item 5) serves what's stored, which is the defaults until a page edits it.
 - **Recommendation:** the page for editing settings, exclusions and the detection list comes in milestone 6 or 7, checked against the agent's bounds (M-059).
+
+### MPD-44 Limits on exclusions and redaction rules served to an agent
+- **Context:** the contract (§5) limits the detection list (100 entries, 64 KB) but not exclusions or extra redaction rules. `GET /api/v1/config` (M-065) needs a ceiling so one group's row can't send an agent an enormous list.
+- **Default:** 500 exclusions and 100 redaction rules (`[agent_config]` in app.ini); anything past that is left out and logged.
+- **Recommendation:** keep these, and ask the agent PM whether the agent has its own limits to match.
 
 ### Deferred with the backups (M-026)
 - **Unraid:** free disk on the cache pool, and where the off-box backup copy goes. Settled with the "before ready to ship" backup work.

@@ -550,3 +550,17 @@ Proposed in [ingest-api.md](ingest-api.md) and `db/migrations/0001_initial.sql`,
 - **Shared code:** `CertIssue` (the JSON body, `csr_invalid`, sign and register, the answer), used by enrolment and renewal. Enrolment's behaviour is unchanged.
 - **Not limited:** how often an agent renews. Each renewal is audited and the per-agent request rate applies (§8.2). A health check for an agent renewing much more than once a year can come with milestone 4's health checks.
 - **`tools/enrol-check.php`** (run by 11) now also renews over 8443: the same key 400, a new key 200, both certificates working, and after the revocation both refused and no renewal.
+
+### M-065 GET /api/v1/config (milestone 3 step 5)
+**Requirements:** MS-ING-07, AG-CFG-01..03, AG-SEC-07, MS-SEC-10, M-008 · **Status:** Built 2026-11-27, waiting for the VM run
+- **What is served:** the built-in defaults (the contract's, which are the agent's own), with the stored overrides of the agent's host group (`agent_config`) on top. A group without a row gets the defaults, `config_version` 0. Nothing edits `agent_config` yet (MPD-43).
+- **Checked again when served** (`AgentSettings`), so a bad row can never reach an agent:
+  - numbers against the agent's bounds (agent 5c plan §5, PD-62). A value out of bounds, not an integer, or an unknown key keeps the default. "MB" and "GB" in the agent's table are read as MiB and GiB, matching its defaults (500 MB = 524,288,000): 64 KiB to 8 MiB, 50 MiB to 4 GiB, 1 to 32 KiB, 0 to 2 GiB, 1 to 256 MiB/s, 1 to 64 MiB. **To confirm with the agent PM.**
+  - collectors must be booleans;
+  - the detection list against §5.1: only the six `DetectEntry` fields (an unknown field such as a path or command refuses the entry), service names or prefixes, HKLM keys under SOFTWARE or SYSTEM with no hive, `.` or `..`, at most 12 components, value names without `\ / : %`; at most 100 entries and 64 KB (CLAUDE.md hard rule);
+  - exclusions: `process_path` (a drive-letter path, or a folder ending in `\*`, no `..`), `remote_cidr` (IPv4 or IPv6), `port` (1 to 65535, or a range), a note up to 200 characters;
+  - redaction rules: `next_arg`, `equals` or `conn_string`, a name of 1 to 64 of `[A-Za-z0-9_.-]`. Additive only: nothing served can turn the agent's own redaction off.
+- **Left out** entries and values are logged as "aio agent-api config group_id=N: left out <place>: <reason>", never with the value (MS-SEC-10).
+- **ETag:** `"cfg-<group id>-<config_version>-<12 hex>"`, the hex a SHA-256 of what is served (without `generated_at`). It changes when the defaults change, not only when the row does. `If-None-Match` with it gets 304 and no body. **The heartbeat now answers with the same computed ETag**; the `etag` column of `agent_config` isn't used for serving.
+- **List limits** the contract doesn't give: 500 exclusions and 100 redaction rules, config defaults marked *(confirm)* (MPD-44).
+- **`tools/enrol-check.php`** (run by 11) now also fetches the config over 8443: 200 with the group's settings, the ETag equal to the heartbeat's, 304 with `If-None-Match`, 401 without a certificate.
