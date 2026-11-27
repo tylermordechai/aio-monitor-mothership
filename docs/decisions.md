@@ -576,7 +576,7 @@ Proposed in [ingest-api.md](ingest-api.md) and `db/migrations/0001_initial.sql`,
 - **`tools/enrol-check.php`** (run by 11) now revokes with `bin/agent.php` (refused without a reason), checks both certificates and renewal are refused, unrevokes, and checks the agent works again and both changes are audited. This is the first half of the milestone 3 gate ("revoked agent refused") on the real API.
 
 ### M-067 Silent agents flagged, and the undeliverable count in the fleet (milestone 3 step 8)
-**Requirements:** MS-ING-08, MS-UI-01, MS-ALR-05, MS-ING-12, M-059, M-063 · **Status:** Built 2026-11-27, waiting for the VM run
+**Requirements:** MS-ING-08, MS-UI-01, MS-ALR-05, MS-ING-12, M-059, M-063 · **Status:** Done 2026-11-27 (06, 09 and 11 reported passed on the VM)
 - **One rule for the fleet table, the host page and the map** (`AgentStatus`). Every authenticated request updates the check-in (ClientCertAuth), so "silent" means no request of any kind:
   - **silent:** no check-in for `stale_after_s` (5 minutes, *(confirm)*, MS-ALR-05). The key stays `stale`; the label is now "silent".
   - **checking in, ingest behind** (new): heartbeats arrive, records are queued, and no batch has been stored for `stale_after_s`: the §4 case "connected, 40 MB queued".
