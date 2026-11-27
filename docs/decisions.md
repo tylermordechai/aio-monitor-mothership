@@ -541,7 +541,7 @@ Proposed in [ingest-api.md](ingest-api.md) and `db/migrations/0001_initial.sql`,
 - **The fleet table** shows the undeliverable count with the agent (M-059). It is built with milestone 3 step 8 (silent agents flagged), which changes the fleet table anyway: a column on `agents` filled by the heartbeat, like `queue_dropped_records`.
 
 ### M-064 POST /api/v1/renew (milestone 3 step 4)
-**Requirements:** MS-ING-11, MS-SEC-02, MS-SEC-08, MS-SEC-10, M-018 · **Status:** Built 2026-11-27, waiting for the VM run
+**Requirements:** MS-ING-11, MS-SEC-02, MS-SEC-08, MS-SEC-10, M-018 · **Status:** Done 2026-11-27 (11: 50 of 50 on the VM)
 - **Who:** the agent named by the client certificate in use (ClientCertAuth, MS-ING-02); a revoked certificate or agent gets 403 `agent_revoked`. The agent row and the certificate in use are locked in the transaction, so a revocation at the same moment is seen.
 - **The CSR:** the §2.3 checks with the agent's own ID as the CN, and **a new key**: the key of the certificate in use gets 400 `csr_invalid` (new reason `same_key`, "reuses the key of the certificate in use").
 - **The result:** the new certificate is added as `valid` (`issued_via = renew`), every other valid certificate of the agent becomes `superseded`. Superseded certificates still authenticate until they expire (§2.6), and can renew again, so a lost answer costs nothing. The answer has the §2.2 fields, with status 200.
