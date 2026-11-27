@@ -566,7 +566,7 @@ Proposed in [ingest-api.md](ingest-api.md) and `db/migrations/0001_initial.sql`,
 - **`tools/enrol-check.php`** (run by 11) now also fetches the config over 8443: 200 with the group's settings, the ETag equal to the heartbeat's, 304 with `If-None-Match`, 401 without a certificate.
 
 ### M-066 Revoke and unrevoke (milestone 3 step 6)
-**Requirements:** MS-SEC-02, MS-SEC-08, M-003 · **Status:** Built 2026-11-27, waiting for the VM run
+**Requirements:** MS-SEC-02, MS-SEC-08, M-003 · **Status:** Done 2026-11-27 (09 and 11 reported passed on the VM)
 - **`bin/agent.php list | show | revoke | unrevoke | revoke-cert`**, run with sudo as `aio_maint` (M-036). The logic is in `AgentAdmin`, for the admin page later (MPD-40).
 - **Revoke an agent:** `agents.status = revoked` with the time and reason. Every request with any of its certificates gets 403 `agent_revoked` from then on, because ClientCertAuth checks on every request (§2.4); its agent ID can't enrol again (§2.5). The agent keeps its queue and tries once an hour (§8.1 rule 8). The certificates' own status doesn't change, so an unrevoke restores them as they were.
 - **Unrevoke:** for a mistake. The agent is active again; its certificates that aren't revoked themselves work again and it sends its queue. The audit row keeps the earlier revocation's time and reason.
