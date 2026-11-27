@@ -5,7 +5,8 @@
  *
  *   sudo php tools/dev-agents.php create 500 [--url=https://192.168.0.191:8443]   # enrols SIM-0001..
  *   sudo php tools/dev-agents.php list
- *   sudo php tools/dev-agents.php delete       # every simulator row and file, nothing else
+ *   sudo php tools/dev-agents.php delete       # every simulator row and file, nothing else;
+ *                                              # in batches with progress (M-069), minutes for big tables
  *
  * Since milestone 3 step 10 (M-068) each simulated agent enrols like a real
  * one (MS-ING-06): a one-time deployment token for its hostname (TokenStore),
@@ -151,6 +152,38 @@ function listAgents(PDO $pdo): void
     echo "simulated agents: {$r['agents']}, last check-in: " . ($r['last_checkin'] ?? 'never') . "\n";
 }
 
+/**
+ * DELETE ... WHERE $where in batches (M-069), printing the table, the rows
+ * deleted so far, the table's approximate size and the time taken.
+ */
+function deleteBatched(PDO $pdo, string $table, string $where, int $batch = 10_000): int
+{
+    $est = $pdo->prepare('SELECT TABLE_ROWS FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?');
+    $est->execute([$table]);
+    $about = (int) $est->fetchColumn();
+    $t0 = microtime(true);
+    $last = $t0;
+    $done = 0;
+    do {
+        $n = (int) $pdo->exec("DELETE FROM `$table` WHERE $where LIMIT $batch");
+        $done += $n;
+        $now = microtime(true);
+        if ($n === $batch && $now - $last >= 5) {
+            printf("  %s: %s rows so far (the table has about %s), %s\n", $table, number_format($done), number_format($about), elapsed($now - $t0));
+            $last = $now;
+        }
+    } while ($n === $batch);
+    if ($done > 0) {
+        printf("  %s: %s rows, %s\n", $table, number_format($done), elapsed(microtime(true) - $t0));
+    }
+    return $done;
+}
+
+function elapsed(float $s): string
+{
+    return $s < 60 ? sprintf('%.0f s', $s) : sprintf('%d min %02d s', intdiv((int) $s, 60), (int) $s % 60);
+}
+
 function deleteAll(PDO $pdo): void
 {
     $s = $pdo->prepare('SELECT a.id AS agent_pk, h.id AS host_pk FROM agents a JOIN hosts h ON h.id = a.host_pk JOIN host_groups g ON g.id = h.group_id WHERE g.name = ?');
@@ -159,6 +192,10 @@ function deleteAll(PDO $pdo): void
     $agents = array_map('intval', array_column($rows, 'agent_pk'));
     $hosts = array_values(array_unique(array_map('intval', array_column($rows, 'host_pk'))));
     if ($agents !== []) {
+        // M-069: batches of 10,000 rows, each its own commit, with progress at
+        // least every 5 s. Stopping it loses at most one batch; run it again
+        // to finish. The big tables (net_flows) take minutes on hard drives.
+        echo 'deleting the data of ' . count($agents) . " simulated agents, table by table; the big ones take minutes\n";
         $in = implode(',', $agents);
         // Enrolment tokens stay, as a record, without the link to the agent (M-068).
         $pdo->exec("UPDATE enrollment_tokens SET used_by_agent_pk = NULL WHERE used_by_agent_pk IN ($in)");
@@ -168,10 +205,7 @@ function deleteAll(PDO $pdo): void
             }
             $cols = TableMap::columns($t);
             if (isset($cols['agent_pk'])) {
-                $n = $pdo->exec("DELETE FROM `$t` WHERE agent_pk IN ($in)");
-                if ($n > 0) {
-                    echo "  $t: $n rows\n";
-                }
+                deleteBatched($pdo, $t, "agent_pk IN ($in)");
             }
         }
         // Tables keyed by host only (flow_conn_hourly, M-054): cleared by host.
@@ -182,10 +216,7 @@ function deleteAll(PDO $pdo): void
             }
             $cols = TableMap::columns($t);
             if (isset($cols['host_pk']) && !isset($cols['agent_pk'])) {
-                $n = $pdo->exec("DELETE FROM `$t` WHERE host_pk IN ($hin)");
-                if ($n > 0) {
-                    echo "  $t: $n rows\n";
-                }
+                deleteBatched($pdo, $t, "host_pk IN ($hin)");
             }
         }
         $pdo->exec("DELETE FROM agent_certificates WHERE agent_pk IN ($in)");

@@ -341,6 +341,7 @@ sudo php bin/agent.php list
 - **Expected:** SIM-0001 and SIM-0002 "checking in", SIM-0003 "revoked", SIM-0004 "silent". The simulator's `by_status` shows 403s for SIM-0003's requests and 200s for the rest.
 - **The dashboard** shows the same in the fleet table and on the map.
 - **Afterwards:** `sudo php tools/dev-agents.php delete` removes the four agents; the audit rows stay.
+- **`delete` with a lot of simulator data** (for example after the milestone 5 run) takes many minutes on the hard drives, mostly `net_flows`. It deletes in batches and prints progress at least every 5 s (M-069). Stopping it is safe: run it again to finish.
 
 ## Milestone 5: 7 days of simulator data
 
