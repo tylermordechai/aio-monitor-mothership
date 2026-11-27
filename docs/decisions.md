@@ -552,7 +552,7 @@ Proposed in [ingest-api.md](ingest-api.md) and `db/migrations/0001_initial.sql`,
 - **`tools/enrol-check.php`** (run by 11) now also renews over 8443: the same key 400, a new key 200, both certificates working, and after the revocation both refused and no renewal.
 
 ### M-065 GET /api/v1/config (milestone 3 step 5)
-**Requirements:** MS-ING-07, AG-CFG-01..03, AG-SEC-07, MS-SEC-10, M-008 · **Status:** Built 2026-11-27, waiting for the VM run
+**Requirements:** MS-ING-07, AG-CFG-01..03, AG-SEC-07, MS-SEC-10, M-008 · **Status:** Done 2026-11-27 (09 and 11 reported passed on the VM)
 - **What is served:** the built-in defaults (the contract's, which are the agent's own), with the stored overrides of the agent's host group (`agent_config`) on top. A group without a row gets the defaults, `config_version` 0. Nothing edits `agent_config` yet (MPD-43).
 - **Checked again when served** (`AgentSettings`), so a bad row can never reach an agent:
   - numbers against the agent's bounds (agent 5c plan §5, PD-62). A value out of bounds, not an integer, or an unknown key keeps the default. "MB" and "GB" in the agent's table are read as MiB and GiB, matching its defaults (500 MB = 524,288,000): 64 KiB to 8 MiB, 50 MiB to 4 GiB, 1 to 32 KiB, 0 to 2 GiB, 1 to 256 MiB/s, 1 to 64 MiB. **To confirm with the agent PM.**
