@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # 06-mariadb.sh: MariaDB 11.8 from Ubuntu's own archive, hardened and local
 # only; the aio database; the migrations in db/migrations (the schema gate);
-# four application users with their own grants and generated passwords
-# (ingest, dashboard, analyst, maint; M-036, M-053).
+# five application users with their own grants and generated passwords
+# (ingest, dashboard, analyst, admin, maint; M-036, M-053, M-070).
 #
 # Needs sudo: yes. Reboots: no (restarts MariaDB when its config changes).
 # Safe to re-run: yes. Applied migrations are recorded with a checksum and
@@ -13,7 +13,7 @@
 #             refused once any agent is enrolled)
 # Passwords are written only to root-only files under /etc/aio-mothership/db/
 # and are never printed (MS-SEC-10).
-# Requirements: MS-SEC-04, MS-DAT-01, MS-DAT-02, MS-ING-04, M-036, M-053.
+# Requirements: MS-SEC-04, MS-DAT-01, MS-DAT-02, MS-ING-04, M-036, M-053, M-070.
 
 source "$(dirname "$0")/lib.sh"
 need_root
@@ -22,10 +22,10 @@ banner "MariaDB $AIO_MARIADB_SERIES (Ubuntu), database '$AIO_DB_NAME', schema, a
 RECREATE=0
 [[ "${1:-}" == "--recreate-db" ]] && RECREATE=1
 DB=$AIO_DB_NAME
-APP_USERS=(ingest dashboard analyst maint)
+APP_USERS=(ingest dashboard analyst admin maint)
 # The PHP pool group that may read each credentials file (M-047, M-053);
 # maint stays root-only.
-cred_group() { case $1 in ingest) echo aio-ingest ;; dashboard|analyst) echo aio-dashboard ;; *) echo "" ;; esac; }
+cred_group() { case $1 in ingest) echo aio-ingest ;; dashboard|analyst|admin) echo aio-dashboard ;; *) echo "" ;; esac; }
 CRED_DIR="$AIO_ETC/db"
 LOG_DIR=/var/log/aio-mothership/migrations
 
@@ -195,7 +195,7 @@ check "no anonymous users" sql_is "SELECT COUNT(*) FROM mysql.user WHERE User=''
 check "root only at localhost" sql_is "SELECT COUNT(*) FROM mysql.user WHERE User='root' AND Host<>'localhost'" 0
 check "root signs in by unix socket" root_socket
 check "no test database" sql_is "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name='test'" 0
-check "credential files: maint 600 root; ingest, dashboard, analyst 640 root:<their pool> (M-047, M-053)" creds_ok
+check "credential files: maint 600 root; ingest, dashboard, analyst, admin 640 root:<their pool> (M-047, M-053, M-070)" creds_ok
 check "credential directory is 711 (no listing)" file_mode_is "$CRED_DIR" 711 root root
 
 echo
@@ -228,13 +228,25 @@ check_not "dashboard: can't alter tables"                   as_app dashboard "AL
 check     "dashboard: reads net_flows"                      as_app dashboard "SELECT COUNT(*) FROM aio.net_flows WHERE 1=0"
 check_not "dashboard: can't read process_command_lines (M-053)" as_app dashboard "SELECT COUNT(*) FROM aio.process_command_lines WHERE 1=0"
 check_not "dashboard: can't write net_flows"                as_app dashboard "UPDATE aio.net_flows SET seq=seq WHERE 1=0"
-check_not "dashboard: can't update agents (no admin pages yet)" as_app dashboard "UPDATE aio.agents SET status=status WHERE 1=0"
+check_not "dashboard: can't update agents (the admin pages use aio_admin, M-070)" as_app dashboard "UPDATE aio.agents SET status=status WHERE 1=0"
+check_not "dashboard: can't make enrolment tokens"           as_app dashboard "INSERT INTO aio.enrollment_tokens (id) SELECT 1 FROM DUAL WHERE 1=0"
 check_not "dashboard: can't update alerts (milestone 7)"     as_app dashboard "UPDATE aio.alerts SET id=id WHERE 1=0"
 check     "dashboard: may update users (sign-in)"           as_app dashboard "UPDATE aio.users SET id=id WHERE 1=0"
 check     "analyst: reads process_command_lines"            as_app analyst "SELECT COUNT(*) FROM aio.process_command_lines WHERE 1=0"
 check_not "analyst: can't read net_flows"                   as_app analyst "SELECT COUNT(*) FROM aio.net_flows WHERE 1=0"
 check_not "analyst: can't read users"                       as_app analyst "SELECT COUNT(*) FROM aio.users WHERE 1=0"
 check_not "analyst: can't update audit_log"                 as_app analyst "UPDATE aio.audit_log SET id=id WHERE 1=0"
+check     "admin: may revoke an agent (M-070)"              as_app admin "UPDATE aio.agents SET status=status, revoked_at=revoked_at, revoke_reason=revoke_reason WHERE 1=0"
+# AgentAdmin and TokenStore lock the row they change (SELECT ... FOR UPDATE, with joins).
+check     "admin: may lock an agent row with its host (FOR UPDATE)" as_app admin "START TRANSACTION; SELECT a.id FROM aio.agents a JOIN aio.hosts h ON h.id = a.host_pk JOIN aio.host_groups g ON g.id = h.group_id WHERE 1=0 FOR UPDATE; COMMIT"
+check     "admin: may lock a token row (FOR UPDATE)"     as_app admin "START TRANSACTION; SELECT id FROM aio.enrollment_tokens WHERE 1=0 FOR UPDATE; COMMIT"
+check_not "admin: can't change an agent's host or ID"       as_app admin "UPDATE aio.agents SET host_pk=host_pk WHERE 1=0"
+check     "admin: may cancel a token"                       as_app admin "UPDATE aio.enrollment_tokens SET cancelled_at=cancelled_at WHERE 1=0"
+check_not "admin: can't change a token's expiry"            as_app admin "UPDATE aio.enrollment_tokens SET expires_at=expires_at WHERE 1=0"
+check_not "admin: can't touch certificates"                 as_app admin "UPDATE aio.agent_certificates SET status=status WHERE 1=0"
+check_not "admin: can't read net_flows"                     as_app admin "SELECT COUNT(*) FROM aio.net_flows WHERE 1=0"
+check_not "admin: can't read users"                         as_app admin "SELECT COUNT(*) FROM aio.users WHERE 1=0"
+check_not "admin: can't update audit_log"                   as_app admin "UPDATE aio.audit_log SET id=id WHERE 1=0"
 check     "maint: signs in and reads retention_policies"    as_app maint "SELECT COUNT(*) FROM aio.retention_policies"
 check_not "maint: can't read the mysql system database"     as_app maint "SELECT COUNT(*) FROM mysql.user"
 check_not "no app user has privileges outside aio"          as_app maint "CREATE DATABASE aio_grant_test"

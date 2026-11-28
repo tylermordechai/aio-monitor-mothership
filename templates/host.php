@@ -19,6 +19,7 @@ $timeBased = in_array($v['tab'], ['connections', 'processes', 'inventory'], true
 $rangeNames = ['1h' => 'Last hour', '24h' => 'Last 24 hours', '7d' => 'Last 7 days'];
 ?>
 <p class="crumbs small"><a href="/">Server map</a> › <?= $e($h['hostname']) ?></p>
+<?php if (($v['notice'] ?? null) !== null) : ?><p class="notice <?= $e($v['notice'][0]) ?>" role="status"><?= $e($v['notice'][1]) ?></p><?php endif; ?>
 <section class="host-head">
   <div>
     <h1><?= $e($h['hostname']) ?> <span class="badge b-<?= $e($h['status']) ?>"><?= $e(AgentStatus::label($h['status'])) ?></span></h1>
@@ -36,6 +37,45 @@ $rangeNames = ['1h' => 'Last hour', '24h' => 'Last 24 hours', '7d' => 'Last 7 da
     <div><dt>Group</dt><dd><?= $e($h['group']) ?></dd></div>
   </dl>
 </section>
+
+<?php if (($v['agentAdmin'] ?? null) !== null) :
+    $ag = $v['agentAdmin']['agent'];
+    $revoked = $ag['status'] === 'revoked';
+    ?>
+<details class="panel admin"<?= $revoked ? ' open' : '' ?>>
+  <summary><strong>Agent and certificates</strong> <span class="muted small">(admins, M-070)</span> <span class="badge b-<?= $revoked ? 'revoked' : 'ok' ?>"><?= $e($ag['status']) ?></span></summary>
+  <p class="small">Agent <span class="mono"><?= $e($ag['agent_id']) ?></span>, enrolled <?= $e(substr((string) $ag['enrolled_at'], 0, 19)) ?> UTC<?= $revoked ? $e(', revoked ' . substr((string) $ag['revoked_at'], 0, 19) . ' UTC: ' . $ag['revoke_reason']) : '' ?>.</p>
+  <table class="grid">
+    <thead><tr><th>Serial</th><th>Status</th><th>Issued by</th><th>Issued (UTC)</th><th>Expires (UTC)</th><th>Revoked</th></tr></thead>
+    <tbody>
+    <?php foreach ($v['agentAdmin']['certificates'] as $c) : ?>
+      <tr>
+        <td class="mono small"><?= $e($c['serial_hex']) ?></td>
+        <td><?= $e($c['status']) ?></td>
+        <td><?= $e($c['issued_via']) ?></td>
+        <td><?= $e(substr((string) $c['issued_at'], 0, 19)) ?></td>
+        <td><?= $e(substr((string) $c['not_after'], 0, 19)) ?></td>
+        <td><?= $e($c['revoked_at'] === null ? '' : substr((string) $c['revoked_at'], 0, 19) . ($c['revoke_reason'] !== null ? ' (' . $c['revoke_reason'] . ')' : '')) ?></td>
+      </tr>
+    <?php endforeach; ?>
+    </tbody>
+  </table>
+  <form method="post" action="<?= $e($base . '/' . ($revoked ? 'unrevoke' : 'revoke')) ?>" class="form-row">
+    <input type="hidden" name="_csrf" value="<?= $e($v['csrf']) ?>">
+    <input type="hidden" name="agent_id" value="<?= $e($ag['agent_id']) ?>">
+    <label>Reason <span class="muted">(required, kept in the audit log)</span>
+      <input type="text" name="reason" required maxlength="500" autocomplete="off">
+    </label>
+    <?php if ($revoked) : ?>
+    <button type="submit">Unrevoke the agent</button>
+    <span class="muted small">Undoes a mistake: its certificates that aren't revoked themselves work again, and it sends what it kept.</span>
+    <?php else : ?>
+    <button type="submit" class="danger">Revoke the agent</button>
+    <span class="muted small">Every request it makes is refused from now on, with any of its certificates. The agent keeps its queue; unrevoking lets it send again.</span>
+    <?php endif; ?>
+  </form>
+</details>
+<?php endif; ?>
 
 <nav class="tabs" aria-label="Host views">
   <?php foreach (HostQuery::TABS as $id => $title) : ?>

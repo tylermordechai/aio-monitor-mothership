@@ -23,6 +23,8 @@ final class Config
             'dashboard_cnf' => '/etc/aio-mothership/db/dashboard.cnf',
             // M-053: the only user that can read process_command_lines.
             'analyst_cnf' => '/etc/aio-mothership/db/analyst.cnf',
+            // M-070: the admin pages' writes (tokens, revoke), used only after the admin check.
+            'admin_cnf' => '/etc/aio-mothership/db/admin.cnf',
             'name' => 'aio',
         ],
         'ingest' => [
@@ -81,6 +83,18 @@ final class Config
         'agent_config' => [
             'max_exclusions' => 500,
             'max_redaction_rules' => 100,
+        ],
+        // Milestone 3 step 9 (M-071, M-068): the agent CA's CRL, built by the
+        // root job tools/jobs/crl-build.php (aio-crl.service).
+        'crl' => [
+            'valid_days' => 30,              // (confirm) M-068, MPD-41
+            'warn_days' => 7,                // M-068: warn 7 days before it expires
+            'crl_file' => '/etc/aio-mothership/pki/public/agent-ca.crl',
+            'ca_cert' => '/etc/aio-mothership/pki/agent-ca/ca.crt',
+            'ca_key' => '/etc/aio-mothership/pki/agent-ca/ca.key',
+            'state_file' => '/var/lib/aio-mothership/crl/state.json',
+            // Written by the dashboard pool and bin/agent.php; aio-crl.path watches it.
+            'request_file' => '/var/lib/aio-mothership/crl-request/rebuild',
         ],
         'heartbeat' => [
             'interval_s' => 60,

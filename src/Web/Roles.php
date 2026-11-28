@@ -34,6 +34,12 @@ final class Roles
         return self::atLeast($role, self::ANALYST);
     }
 
+    /** M-070: the enrolment page, tokens and the revoke button (MS-SEC-07). */
+    public static function managesAgents(string $role): bool
+    {
+        return self::atLeast($role, self::ADMIN);
+    }
+
     /** @return list<string> */
     public static function all(): array
     {

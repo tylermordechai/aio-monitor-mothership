@@ -12,7 +12,8 @@ use PDO;
 /**
  * Creating, listing and cancelling enrolment tokens (ingest-api.md §2.1,
  * §2.5; MS-SEC-03, M-021, M-061). Used by bin/token-create.php as aio_maint,
- * and later by the admin page (MPD-40). Every change writes an audit row; the
+ * and by the admin page (M-070) as aio_admin, which passes the signed-in
+ * user's ID and address for the audit row. Every change writes an audit row; the
  * token itself is returned once by create() and never stored, printed to a
  * log or put in the audit details (MS-SEC-10).
  */
@@ -88,7 +89,7 @@ final class TokenStore
      * @param array{kind?: string, group?: string, days?: int|string|null, hostname?: string|null, reenroll?: string|null, note?: string|null} $o
      * @return array{id: int, token: string, kind: string, group: string, expires_at: string, hostname: ?string, reenroll: ?string}
      */
-    public function create(array $o, string $actor, ?float $now = null): array
+    public function create(array $o, string $actor, ?float $now = null, ?int $userId = null, string $ip = ''): array
     {
         $r = $this->check($o);
         $now ??= microtime(true);
@@ -119,7 +120,7 @@ final class TokenStore
             $expires = Time::nowDb($now + $r['seconds']);
             $s = $this->pdo->prepare(
                 'INSERT INTO enrollment_tokens (token_sha256, group_id, expected_hostname, reenroll_agent_id, token_kind, note, created_by, created_by_name, created_at, expires_at)
-                 VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)'
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
             );
             $s->bindValue(1, EnrolToken::hash($token), PDO::PARAM_LOB);
             $s->bindValue(2, (int) $groupId, PDO::PARAM_INT);
@@ -127,12 +128,13 @@ final class TokenStore
             $s->bindValue(4, $r['reenroll']);
             $s->bindValue(5, $r['kind']);
             $s->bindValue(6, $r['note']);
-            $s->bindValue(7, mb_substr($actor, 0, 100));
-            $s->bindValue(8, $created);
-            $s->bindValue(9, $expires);
+            $s->bindValue(7, $userId, $userId === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
+            $s->bindValue(8, mb_substr($actor, 0, 100));
+            $s->bindValue(9, $created);
+            $s->bindValue(10, $expires);
             $s->execute();
             $id = (int) $this->pdo->lastInsertId();
-            Audit::write($this->pdo, 'enrollment_token_created', null, $actor, '', 'enrollment_token', (string) $id, array_filter([
+            Audit::write($this->pdo, 'enrollment_token_created', $userId, $actor, $ip, 'enrollment_token', (string) $id, array_filter([
                 'kind' => $r['kind'],
                 'group' => $r['group'],
                 'expires_at' => $expires,
@@ -180,8 +182,14 @@ final class TokenStore
         return $s->fetchAll();
     }
 
+    /** @return list<string> the host group names, for the admin page's form */
+    public function groups(): array
+    {
+        return array_map('strval', $this->pdo->query('SELECT name FROM host_groups ORDER BY name')->fetchAll(PDO::FETCH_COLUMN));
+    }
+
     /** Cancels an open token. Throws \InvalidArgumentException if it isn't open. */
-    public function cancel(int $id, string $actor, ?float $now = null): void
+    public function cancel(int $id, string $actor, ?float $now = null, ?int $userId = null, string $ip = ''): void
     {
         $nowDb = Time::nowDb($now);
         $this->pdo->beginTransaction();
@@ -201,7 +209,7 @@ final class TokenStore
             }
             $this->pdo->prepare('UPDATE enrollment_tokens SET cancelled_at = ?, cancelled_by = ? WHERE id = ?')
                 ->execute([$nowDb, mb_substr($actor, 0, 100), $id]);
-            Audit::write($this->pdo, 'enrollment_token_cancelled', null, $actor, '', 'enrollment_token', (string) $id);
+            Audit::write($this->pdo, 'enrollment_token_cancelled', $userId, $actor, $ip, 'enrollment_token', (string) $id);
             $this->pdo->commit();
         } catch (\Throwable $e) {
             $this->pdo->rollBack();

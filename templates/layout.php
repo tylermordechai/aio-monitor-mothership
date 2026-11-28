@@ -9,6 +9,8 @@
  * @var array<string, mixed> $v
  * @var callable(mixed): string $e
  */
+use Aio\Web\Roles;
+
 $user = $v['user'] ?? null;
 ?>
 <!doctype html>
@@ -25,6 +27,7 @@ $user = $v['user'] ?? null;
   <?php if (is_array($user)) : ?>
   <nav class="main">
     <a href="/">Server map</a>
+    <?php if (Roles::managesAgents((string) $user['role'])) : ?><a href="/admin/enrolment">Enrolment</a><?php endif; ?>
   </nav>
   <div class="who">
     <span><?= $e($user['display_name'] ?? $user['username']) ?></span>
@@ -37,6 +40,7 @@ $user = $v['user'] ?? null;
   <?php endif; ?>
 </header>
 <main>
+<?php if (isset($v['crlWarning'])) : ?><p class="notice bad" role="alert"><strong>Revocation list:</strong> <?= $e($v['crlWarning']) ?> <a href="/admin/enrolment">Enrolment</a></p><?php endif; ?>
 <?= $v['content'] ?>
 </main>
 </body>

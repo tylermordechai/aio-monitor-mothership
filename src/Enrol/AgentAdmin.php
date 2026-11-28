@@ -12,7 +12,8 @@ use PDO;
 /**
  * Revoking and unrevoking agents and certificates (ingest-api.md §2.4, §2.5,
  * §8.1 rule 8; MS-SEC-02, MS-SEC-08, M-066). Used by bin/agent.php as
- * aio_maint, and later by the admin page (MPD-40).
+ * aio_maint, and by the admin page and the host page's revoke button (M-070)
+ * as aio_admin, which pass the signed-in user's ID and address.
  *
  * - Revoking an agent refuses every request it makes from then on, with any
  *   of its certificates (ClientCertAuth checks on every request), and its
@@ -33,9 +34,10 @@ final class AgentAdmin
     /** @return list<array<string, mixed>> */
     public function list(?string $status = null, int $limit = 500): array
     {
-        $sql = 'SELECT a.agent_id, a.status, h.hostname, g.name AS group_name, a.last_checkin_at, a.last_version,
+        $sql = 'SELECT a.agent_id, a.status, h.id AS host_pk, h.hostname, g.name AS group_name, a.last_checkin_at, a.last_version,
                        UNIX_TIMESTAMP(a.last_checkin_at) AS checkin_epoch, UNIX_TIMESTAMP(a.last_ingest_at) AS ingest_epoch, a.queue_records,
-                       (SELECT COUNT(*) FROM agent_certificates c WHERE c.agent_pk = a.id AND c.status <> \'revoked\' AND c.not_after > UTC_TIMESTAMP(6)) AS usable_certs
+                       (SELECT COUNT(*) FROM agent_certificates c WHERE c.agent_pk = a.id AND c.status <> \'revoked\' AND c.not_after > UTC_TIMESTAMP(6)) AS usable_certs,
+                       (SELECT MAX(c.not_after) FROM agent_certificates c WHERE c.agent_pk = a.id AND c.status <> \'revoked\') AS cert_expires
                   FROM agents a JOIN hosts h ON h.id = a.host_pk JOIN host_groups g ON g.id = h.group_id'
             . ($status === null ? '' : ' WHERE a.status = ?')
             . ' ORDER BY h.hostname, a.agent_id LIMIT ' . max(1, $limit);
@@ -53,31 +55,31 @@ final class AgentAdmin
         return ['agent' => $a, 'certificates' => $c->fetchAll()];
     }
 
-    public function revoke(string $agentId, string $reason, string $actor): void
+    public function revoke(string $agentId, string $reason, string $actor, ?int $userId = null, string $ip = ''): void
     {
         $reason = self::reason($reason);
-        $this->change(function () use ($agentId, $reason, $actor): void {
+        $this->change(function () use ($agentId, $reason, $actor, $userId, $ip): void {
             $a = $this->agent($agentId, true);
             if ($a['status'] === 'revoked') {
                 throw new \InvalidArgumentException("agent $agentId is already revoked");
             }
-            $this->pdo->prepare('UPDATE agents SET status = \'revoked\', revoked_at = ?, revoked_by = NULL, revoke_reason = ? WHERE id = ?')
-                ->execute([Time::nowDb(), $reason, $a['id']]);
-            Audit::write($this->pdo, 'agent_revoked', null, $actor, '', 'agent', $agentId, ['reason' => $reason, 'hostname' => $a['hostname']]);
+            $this->pdo->prepare('UPDATE agents SET status = \'revoked\', revoked_at = ?, revoked_by = ?, revoke_reason = ? WHERE id = ?')
+                ->execute([Time::nowDb(), $userId, $reason, $a['id']]);
+            Audit::write($this->pdo, 'agent_revoked', $userId, $actor, $ip, 'agent', $agentId, ['reason' => $reason, 'hostname' => $a['hostname']]);
         });
     }
 
-    public function unrevoke(string $agentId, string $reason, string $actor): void
+    public function unrevoke(string $agentId, string $reason, string $actor, ?int $userId = null, string $ip = ''): void
     {
         $reason = self::reason($reason);
-        $this->change(function () use ($agentId, $reason, $actor): void {
+        $this->change(function () use ($agentId, $reason, $actor, $userId, $ip): void {
             $a = $this->agent($agentId, true);
             if ($a['status'] !== 'revoked') {
                 throw new \InvalidArgumentException("agent $agentId is not revoked");
             }
             $this->pdo->prepare('UPDATE agents SET status = \'active\', revoked_at = NULL, revoked_by = NULL, revoke_reason = NULL WHERE id = ?')
                 ->execute([$a['id']]);
-            Audit::write($this->pdo, 'agent_unrevoked', null, $actor, '', 'agent', $agentId, [
+            Audit::write($this->pdo, 'agent_unrevoked', $userId, $actor, $ip, 'agent', $agentId, [
                 'reason' => $reason,
                 'was_revoked_at' => $a['revoked_at'],
                 'was_reason' => $a['revoke_reason'],

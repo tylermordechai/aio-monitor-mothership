@@ -1,5 +1,5 @@
--- setup/sql/grants.sql: privileges for the four application users (MS-SEC-04,
--- M-036). Applied by setup/06-mariadb.sh after the migrations, as root over the
+-- setup/sql/grants.sql: privileges for the five application users (MS-SEC-04,
+-- M-036, M-070). Applied by setup/06-mariadb.sh after the migrations, as root over the
 -- local socket. No passwords here: the script creates the users first.
 -- Safe to re-run: every user's privileges are revoked and granted again, so
 -- the result is always exactly this file.
@@ -8,6 +8,7 @@ REVOKE ALL PRIVILEGES, GRANT OPTION FROM 'aio_ingest'@'localhost';
 REVOKE ALL PRIVILEGES, GRANT OPTION FROM 'aio_dashboard'@'localhost';
 REVOKE ALL PRIVILEGES, GRANT OPTION FROM 'aio_maint'@'localhost';
 REVOKE ALL PRIVILEGES, GRANT OPTION FROM 'aio_analyst'@'localhost';
+REVOKE ALL PRIVILEGES, GRANT OPTION FROM 'aio_admin'@'localhost';
 
 -- ---------------------------------------------------------------------------
 -- aio_ingest: the agent API on 8443 (ingest, heartbeat, config, enrol, renew).
@@ -69,8 +70,8 @@ GRANT SELECT ON aio.retention_policies TO 'aio_ingest'@'localhost';
 -- made per table by setup/06-mariadb.sh from the live schema, right after
 -- this file, so new tables are covered when 06 is re-run after a migration.
 -- Writes only users (sign-in counters, tools/users.php) and audit_log
--- (insert only, MS-SEC-08). The alert and admin pages get their own write
--- grants in the milestones that build them (3, 6, 7).
+-- (insert only, MS-SEC-08). The admin pages write through aio_admin below
+-- (M-070); the alert pages get their own grants in milestones 6 and 7.
 -- ---------------------------------------------------------------------------
 GRANT INSERT, UPDATE ON aio.users     TO 'aio_dashboard'@'localhost';
 GRANT INSERT         ON aio.audit_log TO 'aio_dashboard'@'localhost';
@@ -83,6 +84,21 @@ GRANT INSERT         ON aio.audit_log TO 'aio_dashboard'@'localhost';
 -- ---------------------------------------------------------------------------
 GRANT SELECT ON aio.process_command_lines TO 'aio_analyst'@'localhost';
 GRANT INSERT ON aio.audit_log             TO 'aio_analyst'@'localhost';
+
+-- ---------------------------------------------------------------------------
+-- aio_admin: the admin pages' writes (M-070, MS-SEC-07): enrolment tokens and
+-- the revoke and unrevoke buttons. The dashboard connects as it only after
+-- checking the signed-in user is an admin; the pages themselves still read
+-- as aio_dashboard. Column grants: it can cancel a token but not change
+-- one, and change an agent's revocation but nothing else about it.
+-- ---------------------------------------------------------------------------
+GRANT SELECT, INSERT ON aio.enrollment_tokens TO 'aio_admin'@'localhost';
+GRANT UPDATE (cancelled_at, cancelled_by) ON aio.enrollment_tokens TO 'aio_admin'@'localhost';
+GRANT SELECT ON aio.agents TO 'aio_admin'@'localhost';
+GRANT UPDATE (status, revoked_at, revoked_by, revoke_reason) ON aio.agents TO 'aio_admin'@'localhost';
+GRANT SELECT ON aio.hosts       TO 'aio_admin'@'localhost';
+GRANT SELECT ON aio.host_groups TO 'aio_admin'@'localhost';
+GRANT INSERT ON aio.audit_log   TO 'aio_admin'@'localhost';
 
 -- ---------------------------------------------------------------------------
 -- aio_maint: background jobs from systemd timers (partitions, retention,

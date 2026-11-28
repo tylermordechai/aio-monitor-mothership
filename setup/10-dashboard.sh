@@ -22,6 +22,7 @@ URL="https://$AIO_IP"
 WEBCA="$AIO_ETC/pki/public/web-ca.crt"
 
 [[ -f "$CRED_DIR/analyst.cnf" ]] || die "$CRED_DIR/analyst.cnf missing; re-run 06-mariadb.sh first"
+[[ -f "$CRED_DIR/admin.cnf" ]] || die "$CRED_DIR/admin.cnf missing (M-070); re-run 06-mariadb.sh first"
 [[ -f "$AIO_REPO/vendor/autoload.php" ]] || die "vendor/ missing; run 09-app.sh first"
 grep -q FallbackResource /etc/apache2/sites-available/aio-dashboard.conf || die "the dashboard vhost is the milestone 1 one; re-run 08-apache-php.sh first"
 
@@ -69,6 +70,13 @@ edge_post() {
     get -c "$WORK/jar3" -b "$WORK/jar3" -H 'Origin: null' -H 'Sec-Fetch-Site: same-origin' --data-urlencode "_csrf=$t" --data 'username=nobody-m055&password=wrong-password-1' "$URL/login" >/dev/null || return 1
     body_has 'Sign-in failed' -c "$WORK/jar3" -b "$WORK/jar3" "$URL/login"
 }
+no_token_signed_out() {
+    local before after
+    before=$(mariadb -N -e "SELECT COUNT(*) FROM $AIO_DB_NAME.enrollment_tokens")
+    status_is 303 -X POST --data 'kind=manual&group=default' "$URL/admin/tokens" || return 1
+    after=$(mariadb -N -e "SELECT COUNT(*) FROM $AIO_DB_NAME.enrollment_tokens")
+    [[ "$before" == "$after" ]]
+}
 pool_reads() { sudo -u aio-dashboard test -r "$1"; }
 pool_cant_read() { ! sudo -u aio-dashboard test -r "$1"; }
 mig3() { [[ $(mariadb -N -e "SELECT COUNT(*) FROM $AIO_DB_NAME.schema_migrations WHERE version='0003_flow_conn_hourly'") == 1 ]]; }
@@ -84,9 +92,11 @@ check "migration 0004 applied: host page indexes (re-run 06 if not, M-057)" mig4
 check "PHP has Argon2id password hashing (MS-SEC-06)" argon2
 check "dashboard pool reads dashboard.cnf" pool_reads "$CRED_DIR/dashboard.cnf"
 check "dashboard pool reads analyst.cnf (M-053)" pool_reads "$CRED_DIR/analyst.cnf"
+check "dashboard pool reads admin.cnf (M-070)" pool_reads "$CRED_DIR/admin.cnf"
 check "dashboard pool can NOT read maint.cnf" pool_cant_read "$CRED_DIR/maint.cnf"
 check "dashboard pool can NOT read ingest.cnf" pool_cant_read "$CRED_DIR/ingest.cnf"
 check "analyst.cnf is 640 root:aio-dashboard" file_mode_is "$CRED_DIR/analyst.cnf" 640 root aio-dashboard
+check "admin.cnf is 640 root:aio-dashboard" file_mode_is "$CRED_DIR/admin.cnf" 640 root aio-dashboard
 check "sessions directory is 700 aio-dashboard" file_mode_is /var/lib/php/sessions-aio-dashboard 700 aio-dashboard aio-dashboard
 check "templates are outside the web root" not_in_docroot
 check "Cytoscape.js 3.34.4 matches its SHA-256 (M-054)" cy_sha
@@ -99,6 +109,9 @@ check "443: signed out, /api/map answers 401" status_is 401 "$URL/api/map"
 check "443: signed out, a host page redirects" status_is 303 "$URL/hosts/1"
 check "443: signed out, a host tab redirects" status_is 303 "$URL/hosts/1?tab=processes"
 check "443: signed out, a command-line request goes to sign-in, nothing shown (MS-SEC-07)" status_is 303 -X POST --data 'agent_pk=1&seq=1&ts=x' "$URL/hosts/1/command-line"
+check "443: signed out, the enrolment page redirects (M-070)" status_is 303 "$URL/admin/enrolment"
+check "443: signed out, making a token goes to sign-in, no token made (M-070)" no_token_signed_out
+check "443: signed out, a revoke request goes to sign-in (M-070)" status_is 303 -X POST --data 'agent_id=x&reason=x' "$URL/hosts/1/revoke"
 check "443: session cookie __Host-aio is Secure, HttpOnly, SameSite=Strict (MS-SEC-05)" cookie_ok
 check "443: sign-in without the CSRF token is refused (MS-SEC-05)" csrf_refused
 check "443: CSP allows scripts only from this server" header_has "^content-security-policy: .*script-src 'self';" "$URL/login"
