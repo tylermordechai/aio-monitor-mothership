@@ -1,6 +1,6 @@
 # Project status
 
-Last updated: 2026-11-23
+Last updated: 2026-11-28
 
 Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md); decisions are in [decisions.md](decisions.md) (M-001 to M-058); open items are in [pending-decisions.md](pending-decisions.md) (MPD-35, MPD-37, MPD-38, MPD-39); working rules are in [../CLAUDE.md](../CLAUDE.md).
 
@@ -23,7 +23,7 @@ Where the mothership stands. The spec is [mothership-plan.md](mothership-plan.md
 | --- | --- | --- |
 | 1 | Server and contract | **Signed off** (2026-11-19). Done 2026-11-18. Contract approved (2026-11-13, M-017); schema approved (2026-11-18, schema gate passed); all 8 setup scripts passed on the VM; dashboard health page loads in the browser with the web CA |
 | 2 | Ingest, simulator, load test | **Signed off** (2026-11-20, M-051). Gate passed: p95 133 ms, 0 lost, 111.3 MB per host per day |
-| 3 | Enrolment | **Gate run pending** (M-068): steps 1 to 6 and 8 done on the VM, 10 built; 7 and 9 approved, to build. Report below |
+| 3 | Enrolment | **Gate passed** 2026-11-28 (revoked agent refused, silent agent flagged): steps 1 to 6, 8 and 10 done on the VM; 7 (admin page) and 9 (CRL) approved, to build before sign-off. Report below |
 | 4 | Retention (backups moved to "before ready to ship", M-026) | Not started |
 | 5 | Dashboard core | **Signed off** 2026-11-23 (M-058); gate passed, slowest page 416 ms |
 | 6 | Dashboard full, enrichment | Not started |
@@ -224,7 +224,7 @@ Server: `innodb_flush_log_at_trx_commit = 1`, buffer pool 3,072 MB, binlog off.
 | 7 | Admin enrolment page and revoke button (M-068) | | MS-SEC-07, MS-SEC-08, MS-SEC-05 | Approved (MPD-40, yes); to build |
 | 8 | Silent agents flagged (M-067) | `src/Dashboard/AgentStatus.php`, `FleetQuery`, `HostQuery`, `templates/home.php`, `templates/host.php`, `map.js`, migration 0006, `HeartbeatService`, `tools/enrol-check.php` | MS-ING-08, MS-UI-01, MS-ALR-05 | **Done** 2026-11-27. 144 unit tests on the PC (1 new); 2 new integration tests (`FleetStatusTest`). The owner reported 06 (migration 0006), 09 (41 integration tests expected) and 11 (63 checks expected) passed at 712369a; the output wasn't pasted. Both halves of the milestone 3 gate (revoked agent refused, silent agent flagged) are checked in 11 |
 | 9 | CRL (M-068) | | MS-SEC-02 | Approved (MPD-41, yes; 30 days (confirm), daily and on every revocation, warnings); to build |
-| 10 | Simulator enrols for real; gate (M-068) | `tools/dev-agents.php`, `bin/agent.php list` (state) | MS-ING-06, the gate | Built; 144 unit tests on the PC. Waiting for the gate run on the VM (setup.md, "The milestone 3 gate run") |
+| 10 | Simulator enrols for real; gate (M-068) | `tools/dev-agents.php`, `bin/agent.php list` (state) | MS-ING-06, the gate | **Done** 2026-11-28: gate run PASS on the VM (report below) |
 
 ## Milestone 5: dashboard core (signed off 2026-11-23, M-058)
 
@@ -270,7 +270,7 @@ Plan approved 2026-11-22 with the owner's answers (M-053, M-054): Cytoscape.js f
 - 2026-11-23 04:38 UTC, `setup/10-dashboard.sh` at `0d1b130`: **29 passed, 0 failed** (grants and credential files, sessions directory, templates outside the web root, Cytoscape.js SHA-256, flow-rollup timer and job, sign-in page, signed-out redirects and 401, cookie flags, CSRF refusal, CSP, referrer policy and the Edge-style post (M-055), no caching, assets, health page). One admin account.
 - 2026-11-23, after the `--days=7` load: `flow-rollup.php --all` found nothing left to do (the timer had caught up, up to batch 9949, the last batch). `flow_conn_hourly`: 13,580 rows, 2026-11-15 21:00 to 2026-11-22 21:00 (7 days, ending when the load ran), 8 host IDs: the 4 from the `--days=7` load plus 4 left over from milestone 2. `tools/dev-agents.php delete` removed those hosts but not their `flow_conn_hourly` rows (the table has no agent column); the map ignores them (it draws only hosts that exist) and showed 4 hosts, as it should. Fixed: `delete` now also clears tables keyed by host only. The leftover rows are removed once by hand.
 
-## Milestone 3 report (2026-11-27, gate run pending)
+## Milestone 3 report (2026-11-28, gate passed; steps 7 and 9 to build)
 
 **What was built** (M-059 to M-068):
 - **The signing service** (M-060): socket-activated, one sandboxed `aio-signer` process per request, the only non-root reader of the agent CA key; no network, no database; it re-checks every CSR and sets every field of the certificate itself.
@@ -286,7 +286,13 @@ Plan approved 2026-11-22 with the owner's answers (M-053, M-054): Cytoscape.js f
 
 **Results:**
 - 11 passed 18, 32, 43, 50 of 50 with output pasted (steps 1 to 4), then 54, 59 and 63 checks as reported by the owner (steps 5, 6 and 8; output not pasted). 09 passed with 34 integration tests (pasted), then 37, 39 and 41 as reported.
-- **The gate on the real API:** 11's live check shows a revoked agent's heartbeat and renewal refused with 403 `agent_revoked` for every certificate, and a silent agent flagged and cleared. **The gate run with the enrolled simulator is still to do** (setup.md).
+- **The gate on the real API:** 11's live check shows a revoked agent's heartbeat and renewal refused with 403 `agent_revoked` for every certificate, and a silent agent flagged and cleared. 
+- **The gate run, 2026-11-28 (setup.md, "The milestone 3 gate run"): PASS.** Output pasted.
+  - Four simulated agents enrolled through `POST /api/v1/enroll` with deployment tokens (`dev-agents.php create 4`, after the batched delete of the old ones).
+  - Run 1, 4 agents for 120 s (01:16:34 to 01:18:34 UTC): 56 requests, all 200 (48 ingest, 8 heartbeat); 2,152 lines acknowledged, 0 unsent, 0 mismatches; ingest p95 123 ms.
+  - SIM-0003 revoked with `bin/agent.php revoke --reason="milestone 3 gate"`.
+  - Run 2, SIM-0001 to 0003 for 420 s (01:19:26 UTC). **SIM-0003 refused on every request:** 9 ingest and 7 heartbeat 403s, all `agent_revoked`, `retryable:false`. SIM-0001 and 0002: 84 ingest and 14 heartbeat 200s, 0 mismatches, ingest p95 77.5 ms. All 1,122 unsent lines are SIM-0003's queue; the run took 540 s because the simulator's 120 s drain waited on that queue.
+  - **SIM-0004 flagged silent:** `bin/agent.php list` showed SIM-0003 "revoked" (last check-in 01:18:32) and SIM-0004 "silent" (last check-in 01:18:26). SIM-0001 and 0002 also showed "silent", correctly: the list was read more than 5 minutes after run 2 stopped (last check-ins 01:26:18 and 01:26:23).
 - One bug found on the VM, in a test only: the minimal openssl.cnf the Windows test runs need made PHP 8.5 on Linux refuse EC keys (c0475eb).
 
 **Still to build in milestone 3:** step 7, the admin enrolment page and the revoke button (MPD-40, yes); step 9, the CRL (MPD-41, yes).
@@ -394,14 +400,14 @@ Plan approved 2026-11-22 with the owner's answers (M-053, M-054): Cytoscape.js f
 - **Met at the M-050 gate, open at 500 hosts:** MS-ING-10 (p95 133 ms at 4 hosts), verified on production hardware.
 - **Met in milestone 5:** MS-DAT-01 (migrations 0003, 0004), MS-DAT-04 (flows combined by the D-016 key), MS-DAT-05 (every source field shown as fact, likely, guess or unknown), MS-UI-02, MS-UI-07, MS-UI-09 (desktop browser, tested in Edge), MS-SEC-05, MS-SEC-10; MS-SEC-04 for the dashboard and analyst users. Partly: MS-UI-01 (alerts in milestone 7), MS-SEC-06 (TOTP, MPD-38), MS-SEC-07 and 08 (exports and admin pages later; 2-year keep is retention), MS-SEC-09 (the 30-day clearing is retention).
 - **Met at the M-050 gate, open at 500 hosts:** MS-UI-08 (every page under 5 s at 4 hosts, 7.9 days), verified on production hardware.
-- **Met in milestone 3** (gate run pending): MS-ING-06, 07 and 08; MS-SEC-02 (the CRL is step 9), MS-SEC-03, MS-SEC-10; MS-UI-01's silent flag. Partly: MS-ALR-05 (the alert comes with milestone 7). See the milestone 3 report.
+- **Met in milestone 3** (gate passed 2026-11-28): MS-ING-06, 07 and 08; MS-SEC-02 (the CRL is step 9), MS-SEC-03, MS-SEC-10; MS-UI-01's silent flag. Partly: MS-ALR-05 (the alert comes with milestone 7). See the milestone 3 report.
 - **Not built yet:** MS-DAT-02 and 03 (milestone 4).
 - **Every other Must** (enrolment, retention, dashboard, alerts, operations) is open, in milestones 3 to 7.
 - **Only partly met:** MS-OPS-07 (rebuild from the repo). setup.md and the scripts cover the server; the app, timers and restore come later.
 
 ## Next steps
 
-1. **Milestone 3 (enrolment): in progress** (M-059). Step 1 (the signing service) passed on the VM on 2026-11-24; step 2 (token CLI, CA export) done on the VM; step 3 (the enrol endpoint) done on the VM; step 4 (renew) done on the VM; step 5 (config) done on the VM; step 6 (revoke and unrevoke) done on the VM; step 8 (silent agents) done on the VM; step 10 (the simulator enrols for real) built, waiting for the gate run; steps 7 (admin page) and 9 (CRL) approved (M-068), to build. Then milestone 4 (retention).
+1. **Milestone 3 (enrolment): in progress** (M-059). Step 1 (the signing service) passed on the VM on 2026-11-24; step 2 (token CLI, CA export) done on the VM; step 3 (the enrol endpoint) done on the VM; step 4 (renew) done on the VM; step 5 (config) done on the VM; step 6 (revoke and unrevoke) done on the VM; step 8 (silent agents) done on the VM; step 10 (the simulator enrols for real) done on the VM, **gate passed 2026-11-28**; next steps 7 (admin page) and 9 (CRL) approved (M-068), to build. Then milestone 4 (retention).
 2. **Snapshots: removed** (2026-11-23). The owner moves the old chain files into `old-chain/` after a few days and deletes them later. The fsync figure after the change is still to be measured (`php tools/fsync-test.php`).
 3. **Open, for later:** MPD-37 (disk sizing and pilot capacity), MPD-35 (simulator volume).
 4. **Agent 5c can start now** from the approved contract (ingest-api.md §10), collector address 192.168.0.191. Agents pin the agent CA SHA-256 shown above.
