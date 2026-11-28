@@ -14,7 +14,10 @@
  * token again (403) → a second token for the same agent ID (409) → the agent
  * revoked with bin/agent.php (M-066) → heartbeats with both certificates
  * refused and no renewal (403 agent_revoked) → unrevoked → its heartbeat
- * works again. Then every row of the "setup-check" group is deleted, with
+ * works again. Those use --no-crl, to test the database check alone; then
+ * the CRL (M-071): revoked again with the rebuild → both certificates on the
+ * CRL → Apache refuses them in the TLS handshake → unrevoked → off the CRL
+ * → accepted again. Then every row of the "setup-check" group is deleted, with
  * this run's failure rows; the audit rows stay. The keys live only in a 700
  * temporary folder and are deleted. Prints PASS:/FAIL: lines; exit code 1 on
  * any failure.
@@ -27,6 +30,8 @@ require dirname(__DIR__) . '/vendor/autoload.php';
 use Aio\Config;
 use Aio\Db;
 use Aio\Enrol\TokenStore;
+use Aio\Pki\CrlBuilder;
+use Aio\Pki\OpensslTool;
 use Aio\Ingest\Schema\TableMap;
 use Aio\Util\Ip;
 use Aio\Util\Time;
@@ -167,16 +172,61 @@ try {
         return $rc;
     };
     $say($cli('revoke', $agentId) !== 0, 'bin/agent.php revoke without a reason is refused');
-    $say($cli('revoke', $agentId, '--reason=tools/enrol-check.php') === 0, 'bin/agent.php revoke');
+    $say($cli('revoke', $agentId, '--reason=tools/enrol-check.php', '--no-crl') === 0, 'bin/agent.php revoke (the database check alone: --no-crl)');
     foreach (['agent.pem' => 'old', 'renewed.pem' => 'renewed'] as $file => $which) {
         [$st, $rv] = $post('/api/v1/heartbeat', '{}', "$work/$file");
         $say($st === 403 && $code($rv) === 'agent_revoked', "after revoking it, a heartbeat with the $which certificate: 403 agent_revoked (got $st " . $code($rv) . ')');
     }
     [$st, $rv] = $post('/api/v1/renew', (string) json_encode(['csr' => $csr2Pem]), "$work/renewed.pem");
     $say($st === 403 && $code($rv) === 'agent_revoked', "and it can't renew: 403 agent_revoked (got $st " . $code($rv) . ')');
-    $say($cli('unrevoke', $agentId, '--reason=tools/enrol-check.php') === 0, 'bin/agent.php unrevoke');
+    $say($cli('unrevoke', $agentId, '--reason=tools/enrol-check.php', '--no-crl') === 0, 'bin/agent.php unrevoke');
     [$st] = $post('/api/v1/heartbeat', '{}', "$work/renewed.pem");
     $say($st === 200, "after the unrevoke, its heartbeat: 200 again (got $st)");
+
+    // The CRL (M-071, M-068): revoking the agent lists its certificates, and
+    // Apache refuses them before HTTP; unrevoking takes them off again.
+    $crl = new CrlBuilder(new OpensslTool(), $config->string('crl', 'ca_cert'), $config->string('crl', 'ca_key'), $config->int('crl', 'valid_days'));
+    $buildMs = static function () use ($config): int {
+        $s = json_decode((string) @file_get_contents($config->string('crl', 'state_file')), true);
+        return is_array($s) ? (int) ($s['build_ms'] ?? 0) : 0;
+    };
+    $waitFor = static function (callable $cond, int $seconds, string $what): bool {
+        $t0 = microtime(true);
+        $last = $t0;
+        while (!$cond()) {
+            if (microtime(true) - $t0 > $seconds) {
+                return false;
+            }
+            if (microtime(true) - $last >= 5) {
+                printf("waiting for %s, %d s so far (up to %d s)\n", $what, (int) (microtime(true) - $t0), $seconds);
+                $last = microtime(true);
+            }
+            usleep(250_000);
+        }
+        return true;
+    };
+    $s = $pdo->prepare('SELECT c.serial_hex FROM agent_certificates c JOIN agents a ON a.id = c.agent_pk WHERE a.agent_id = ?');
+    $s->execute([$agentId]);
+    $serials = array_map([CrlBuilder::class, 'serial'], $s->fetchAll(PDO::FETCH_COLUMN));
+    $onCrl = static function () use ($crl, $config, $serials): int {
+        $listed = $crl->inspect($config->string('crl', 'crl_file'))['serials'];
+        return count(array_intersect($serials, $listed));
+    };
+    $say(is_file($config->string('crl', 'apache_include')), '8443 loads the CRL (the Apache include is in place)');
+    $asked = (int) round(microtime(true) * 1000);
+    $say($cli('revoke', $agentId, '--reason=tools/enrol-check.php CRL') === 0, 'bin/agent.php revoke, with the CRL rebuild');
+    $say($waitFor(static fn (): bool => $buildMs() > $asked, 60, 'the CRL rebuild'), 'the revocation started a CRL rebuild (aio-crl.path)');
+    $say($onCrl() === count($serials) && count($serials) === 2, 'the CRL lists both of its certificates (' . $onCrl() . ' of ' . count($serials) . ')');
+    foreach (['agent.pem' => 'old', 'renewed.pem' => 'renewed'] as $file => $which) {
+        $refused = $waitFor(static fn (): bool => $post('/api/v1/heartbeat', '{}', "$work/$file")[0] === 0, 20, 'Apache to load the new CRL');
+        $say($refused, "Apache refuses the $which certificate in the TLS handshake, no HTTP answer (M-071)");
+    }
+    $asked = (int) round(microtime(true) * 1000);
+    $say($cli('unrevoke', $agentId, '--reason=tools/enrol-check.php CRL') === 0, 'bin/agent.php unrevoke, with the CRL rebuild');
+    $say($waitFor(static fn (): bool => $buildMs() > $asked, 60, 'the CRL rebuild'), 'the unrevocation started a CRL rebuild');
+    $say($onCrl() === 0, 'its certificates are off the CRL');
+    $ok = $waitFor(static fn (): bool => $post('/api/v1/heartbeat', '{}', "$work/renewed.pem")[0] === 200, 20, 'Apache to load the new CRL');
+    $say($ok, 'after the unrevoke, Apache accepts it again: heartbeat 200');
 
     // The gate's second half (M-067): a silent agent is flagged in the fleet.
     $fleetStatus = static function () use ($pdo, $config, $agentId): ?array {
@@ -198,7 +248,7 @@ try {
     $say($st === 200 && ($f['status'] ?? '') === 'ok' && ($f['undeliverable_records'] ?? null) === 2, 'a heartbeat clears the flag, and the fleet shows its undeliverable count (2)');
     $au = $pdo->prepare('SELECT COUNT(*) FROM audit_log WHERE target_id = ? AND action IN (\'agent_revoked\', \'agent_unrevoked\') AND username LIKE \'cli:%\'');
     $au->execute([$agentId]);
-    $say((int) $au->fetchColumn() === 2, 'the revoke and the unrevoke are in the audit log');
+    $say((int) $au->fetchColumn() === 4, 'both revokes and unrevokes are in the audit log');
 } catch (RuntimeException $e) {
     if ($e->getMessage() !== 'stop') {
         $say(false, 'error: ' . $e->getMessage());

@@ -1,0 +1,14 @@
+# Managed by aio-mothership setup/11-enrolment.sh (M-071). Do not edit here.
+# The CRL is valid 30 days (confirm, M-068); it is rebuilt every day, so a
+# few failed days still leave weeks before it expires.
+[Unit]
+Description=All In 1 Monitor: rebuild the agent CA's CRL daily (M-071)
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+RandomizedDelaySec=10min
+Persistent=true
+OnBootSec=5min
+
+[Install]
+WantedBy=timers.target

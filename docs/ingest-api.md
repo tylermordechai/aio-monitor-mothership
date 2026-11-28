@@ -1,8 +1,10 @@
-# Ingest API contract (v1.1)
+# Ingest API contract (v1.2)
 
 **Status: approved (v1), 2026-11-13, at the milestone 1 review.** Nothing here is built yet. Agent milestone 5c (collector transport) is built against this document. Changes from here on are recorded as decisions (M-xxx) and keep `/api/v1`; a breaking change needs `/api/v2`.
 
 **v1.1, 2026-11-27 (M-063): detail only, nothing changes meaning.** From the agent's approved 5c plan (agent PD-67, D-087, D-088): a batch that keeps getting an answer retrying can't fix is split down to single lines, and a single line that still fails goes to the agent's `undeliverable` file (§8.1 rule 7); the heartbeat reports it (§4, `queue.undeliverable_records`, `queue.undeliverable_bytes`); `coverage_gap` gains the reason `undeliverable` (§9). Everything a v1 agent sends is still valid, and the URLs stay `/api/v1`.
+
+**v1.2, 2026-11-28 (M-071): detail only.** What the CRL of §2.4 step 3 lists (revoked certificates and the certificates of revoked agents, M-068) and what the agent sees when Apache refuses a certificate on it: a TLS alert, not 403 (§8.3). The agent's action in that case is the mothership's proposal, to confirm with the agent PM (MPD-45).
 
 - Requirements: MS-ING-01 to MS-ING-12 (MS-ING-11 added at the review, M-018; MS-ING-12 for the heartbeat, M-042), plus MS-SEC-01..03, MS-SEC-10, MS-OPS-08. Agent side: AG-SEC-03/04/07, AG-DAT-01..04, AG-PRF-04/06, AG-CFG-01..03, AG-INV-16.
 - Decisions: M-001 to M-042 in [decisions.md](decisions.md); the review answers are M-017, M-024 to M-028 and M-030 to M-032. Values still open are in [pending-decisions.md](pending-decisions.md), each with a recommendation.
@@ -98,7 +100,7 @@ The CSR's own signature must verify. `agent_id` must be a lower-case UUID versio
    - not found → 403 `certificate_unknown`;
    - the certificate or its agent is revoked → 403 `agent_revoked`. This check runs on every request, so revocation takes effect at once (MS-SEC-02);
    - otherwise the request belongs to that agent.
-3. **CRL:** the agent CA also publishes a CRL that Apache loads, as a second check. The database lookup is the authority.
+3. **CRL:** the agent CA also publishes a CRL that Apache loads, as a second check. The database lookup is the authority. v1.2 (M-071): the CRL lists every revoked certificate **and every certificate of a revoked agent**, rebuilt within seconds of a revocation or unrevocation and daily; it is valid 30 days. A certificate on it **fails the TLS handshake** (§8.3), so after that rebuild a revoked agent gets a TLS alert instead of 403 `agent_revoked`. Unrevoking takes its certificates off again.
 
 ### 2.5 Agent ID (M-003)
 
@@ -547,6 +549,7 @@ They happen before HTTP, so there is no status code. The agent reports them as `
 | --- | --- |
 | The server's certificate doesn't chain to the pinned CA | Stop and log a security warning. Never send |
 | The agent's certificate expired | Stop. It needs a re-enrolment token |
+| v1.2: the agent's certificate is revoked (TLS alert `certificate_revoked`; the CRL, §2.4 step 3) | Proposed, to confirm with the agent PM (MPD-45): the same as 403 `agent_revoked` (§8.1 rule 8): keep the queue, log to the Event Log, try once an hour. An unrevoke takes it off the CRL and the agent carries on |
 | A network problem (reset, timeout) | Retry with backoff |
 
 ## 9. Record types (schema_version 1)

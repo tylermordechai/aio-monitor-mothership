@@ -1,12 +1,17 @@
 # Pending decisions
 
-Last updated: 2026-11-27 (MPD-40, 41, 43 and 44 answered, M-068)
+Last updated: 2026-11-28 (MPD-45 added, M-071)
 
 Every *(confirm)* value and open question still open, each with a recommendation. To answer, reply with the ID and your choice, for example "MPD-32: keep". Answers are recorded in [decisions.md](decisions.md) and removed from here.
 
 - **Answered:** MPD-01 to MPD-34, recorded as M-017 to M-041; MPD-36, recorded as M-050; MPD-42, recorded as M-062; MPD-40, 41, 43 and 44, recorded as M-068.
 - **Open:** MPD-35 (the default is in the code), MPD-37 (later), MPD-38 (before the pilot), MPD-39 (when the agent's 5d formats are final).
 
+### MPD-45 A revoked agent is refused in the TLS handshake once the CRL is rebuilt (for the agent PM)
+**Requirements:** MS-SEC-02, ingest-api.md §2.4, §8.3 (v1.2) · **Asked:** 2026-11-28 (M-071)
+- **What happens now:** a certificate on the CRL fails the TLS handshake, so the agent gets a TLS alert ("certificate revoked"), not HTTP 403 `agent_revoked`. With the owner's rule (M-068), a revoked agent's certificates are on the CRL within seconds of the revoke, so that is what a revoked agent will normally see.
+- **Proposal:** the agent treats that alert like 403 `agent_revoked` (§8.1 rule 8): keep the queue, log to the Event Log, try once an hour, and not like a network failure (retry with backoff) or an expired certificate (stop). An unrevoke takes the certificates off the CRL, and the agent carries on without losing its queue.
+- **To confirm with the agent PM:** that the Go client can tell this alert apart (Go reports it as `remote error: tls: revoked certificate`), and that the agent will act as proposed. Until then the mothership works either way: a backoff only means more refused handshakes.
 ### MPD-35 How much one simulated server produces
 - **Context:** MS-DAT-06 (MB per host per day) and the load test depend on the simulator's volume per host (`src/Sim/Profile.php`, M-049). The defaults are estimates.
 - **Default:** 20 flows per 10 s, a network snapshot every 5 minutes (40 connections, 12 listeners, 6 UDP), 2 process start/stop pairs a minute, ETW status every minute, a new executable every 5 minutes, a full inventory (60 apps, 120 services) at start and daily.

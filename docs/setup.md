@@ -267,12 +267,14 @@ sudo php tools/users.php add <your-name> --role=admin --display="Your Name"   # 
 
 ## Step 11: enrolment (`11-enrolment.sh`, milestone 3)
 
-After the `git pull`, re-run 06 (new migrations and grants), then 09 (it installs `vendor/` and runs the tests), then 11:
+After the `git pull`, re-run 06 (new migrations and grants), 08 (the vhosts; the 8443 vhost includes the CRL, M-071), then 09 (it installs `vendor/` and runs the tests), 10 (the dashboard checks) and 11:
 
 ```bash
 cd /opt/aio-mothership && git pull --ff-only
 sudo bash setup/06-mariadb.sh 2>&1 | tee ~/setup-logs/06.log
+sudo bash setup/08-apache-php.sh 2>&1 | tee ~/setup-logs/08.log
 sudo bash setup/09-app.sh 2>&1 | tee ~/setup-logs/09.log
+sudo bash setup/10-dashboard.sh 2>&1 | tee ~/setup-logs/10.log
 sudo bash setup/11-enrolment.sh 2>&1 | tee ~/setup-logs/11.log
 ```
 
@@ -284,6 +286,7 @@ sudo bash setup/11-enrolment.sh 2>&1 | tee ~/setup-logs/11.log
 - **Renewal (M-064), in the same live run:** the throwaway agent renews over 8443. The same key is refused (400), a new key gets a new certificate (200), and both the renewed and the old certificate work until the revocation, after which both are refused and the agent can't renew.
 - **Config (M-065), in the same live run:** `GET /api/v1/config` gives the group's settings with an ETag equal to the heartbeat's `config_etag`, 304 with `If-None-Match`, and 401 without a certificate.
 - **Revoke and unrevoke (M-066), in the same live run:** the throwaway agent is revoked with `bin/agent.php` (refused without a reason), both its certificates and its renewal are refused, it is unrevoked and works again, and both changes are in the audit log.
+- **The CRL (M-071), checked by 11 before the live run:** the first CRL is built, verified against the agent CA and valid 30 days; the timer and the path unit run; the dashboard pool can ask for a rebuild but not write the CRL; a request starts a rebuild; then 8443 is told to check the CRL. **In the live run:** the throwaway agent is revoked again, this time with the rebuild; both its certificates go on the CRL and Apache refuses them in the TLS handshake; it is unrevoked, they come off, and it is accepted again.
 - **Silent agents (M-067), in the same live run:** the fleet shows the throwaway agent checking in, flags it silent once its check-in is 10 minutes old, and clears the flag on its next heartbeat, which also shows its undeliverable count. With the revoke checks above, both halves of the milestone 3 gate are checked.
 
 ### Enrolment tokens and the agent CA (M-021, M-061)
@@ -316,6 +319,19 @@ sudo php bin/agent.php revoke-cert <serial> --reason="key copied"   # one certif
 
 - A revoked agent is refused on its next request (403 `agent_revoked`). It keeps its queue and tries once an hour, so an unrevoke loses nothing.
 - Every change needs a reason and is in the audit log as "cli:<your login>".
+- **The same on the dashboard (M-070):** an admin's host page has an "Agent and certificates" panel with a Revoke or Unrevoke button and a reason field. Those changes are audited under the admin's name and address. Tokens are made and cancelled on **Enrolment** (`/admin/enrolment`); a new token is shown once.
+- **The CRL (M-071):** revoke, unrevoke and revoke-cert start a rebuild of the CRL (a few seconds), so Apache refuses a revoked agent's certificates in the TLS handshake too. `--no-crl` skips that; the daily rebuild catches up.
+
+### The CRL (M-071)
+
+```bash
+sudo journalctl -u aio-crl.service -n 5          # the last builds: serials listed, valid until
+sudo systemctl start aio-crl.service             # rebuild now (a second or two)
+cat /var/lib/aio-mothership/crl/state.json       # built, valid until, entries, last error
+openssl crl -in /etc/aio-mothership/pki/public/agent-ca.crl -noout -text | less
+```
+
+- **If the CRL expires, Apache refuses every agent.** It is rebuilt daily and valid 30 days, and the dashboard warns 7 days before and as soon as a build fails. To recover: `sudo systemctl start aio-crl.service`, and check the journal if it fails. As a last resort, `sudo rm /etc/aio-mothership/apache/agent-crl.conf && sudo systemctl reload apache2` turns the CRL check off. The database check still refuses every revoked agent. Re-run 11 to turn it back on.
 
 ## The milestone 3 gate run (M-068)
 

@@ -19,6 +19,11 @@
  *
  * Every change needs a reason and is written to audit_log as "cli:<your
  * login>" (MS-SEC-08). Runs as root to read the aio_maint credentials (M-036).
+ *
+ * revoke, unrevoke and revoke-cert also ask for a CRL rebuild (M-071): within
+ * a few seconds Apache refuses the agent's certificates in the TLS handshake
+ * too, or accepts them again. --no-crl skips that (tools/enrol-check.php uses
+ * it to test the database check alone); the daily rebuild catches up.
  */
 
 declare(strict_types=1);
@@ -43,15 +48,15 @@ foreach ($args as $a) {
 }
 $usage = "usage: sudo php bin/agent.php list [--status=active|revoked|replaced]\n"
     . "       sudo php bin/agent.php show <agent ID>\n"
-    . "       sudo php bin/agent.php revoke|unrevoke <agent ID> --reason=\"...\"\n"
-    . "       sudo php bin/agent.php revoke-cert <serial> --reason=\"...\"\n";
-$known = ['list' => ['status'], 'show' => [], 'revoke' => ['reason'], 'unrevoke' => ['reason'], 'revoke-cert' => ['reason']];
+    . "       sudo php bin/agent.php revoke|unrevoke <agent ID> --reason=\"...\" [--no-crl]\n"
+    . "       sudo php bin/agent.php revoke-cert <serial> --reason=\"...\" [--no-crl]\n";
+$known = ['list' => ['status'], 'show' => [], 'revoke' => ['reason', 'no-crl'], 'unrevoke' => ['reason', 'no-crl'], 'revoke-cert' => ['reason', 'no-crl']];
 if (!isset($known[$cmd])) {
     fwrite($cmd === 'help' ? STDOUT : STDERR, $usage);
     exit($cmd === 'help' ? 0 : 2);
 }
 foreach (array_keys($flags) as $f) {
-    if (!in_array($f, $known[$cmd], true) || $flags[$f] === true) {
+    if (!in_array($f, $known[$cmd], true) || (($flags[$f] === true) !== ($f === 'no-crl'))) {
         fwrite(STDERR, "unknown option or missing value: --$f\n" . $usage);
         exit(2);
     }
@@ -117,16 +122,19 @@ try {
         case 'revoke':
             $admin->revoke($id, $reason, $actor);
             echo "agent $id revoked: every request it makes is refused from now on\n";
+            crl($config, $flags);
             break;
 
         case 'unrevoke':
             $admin->unrevoke($id, $reason, $actor);
             echo "agent $id unrevoked: its certificates that aren't revoked work again\n";
+            crl($config, $flags);
             break;
 
         case 'revoke-cert':
             $admin->revokeCertificate($id, $reason, $actor);
             echo "certificate $id revoked\n";
+            crl($config, $flags);
             break;
     }
 } catch (\InvalidArgumentException $e) {
@@ -134,3 +142,23 @@ try {
     exit(1);
 }
 exit(0);
+
+/**
+ * M-071: asks aio-crl.path for a rebuild. The database check already applies,
+ * so a failure is a warning, not an error.
+ *
+ * @param array<string, string|true> $flags
+ */
+function crl(Config $config, array $flags): void
+{
+    if (isset($flags['no-crl'])) {
+        echo "the revocation list is not rebuilt now (--no-crl); the daily rebuild catches up\n";
+        return;
+    }
+    try {
+        \Aio\Pki\CrlTrigger::fromConfig($config)->request();
+        echo "the revocation list is being rebuilt, a few seconds (sudo journalctl -u aio-crl.service -n 3)\n";
+    } catch (\RuntimeException $e) {
+        fwrite(STDERR, 'warning: could not ask for a revocation list rebuild (' . $e->getMessage() . "); the daily rebuild catches up. Run setup/11-enrolment.sh if this repeats.\n");
+    }
+}

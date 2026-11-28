@@ -1,0 +1,12 @@
+# Managed by aio-mothership setup/11-enrolment.sh (M-071). Do not edit here.
+# A revocation or unrevocation (the dashboard, bin/agent.php) writes the time
+# into this file; systemd then starts aio-crl.service.
+[Unit]
+Description=All In 1 Monitor: rebuild the agent CA's CRL when asked (M-071)
+
+[Path]
+PathModified=/var/lib/aio-mothership/crl-request/rebuild
+Unit=aio-crl.service
+
+[Install]
+WantedBy=paths.target

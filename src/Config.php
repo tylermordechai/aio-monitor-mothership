@@ -95,6 +95,8 @@ final class Config
             'state_file' => '/var/lib/aio-mothership/crl/state.json',
             // Written by the dashboard pool and bin/agent.php; aio-crl.path watches it.
             'request_file' => '/var/lib/aio-mothership/crl-request/rebuild',
+            // 8443 loads the CRL through this file, added by 11 after the first build.
+            'apache_include' => '/etc/aio-mothership/apache/agent-crl.conf',
         ],
         'heartbeat' => [
             'interval_s' => 60,

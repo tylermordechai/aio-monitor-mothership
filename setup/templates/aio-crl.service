@@ -1,0 +1,28 @@
+# Managed by aio-mothership setup/11-enrolment.sh (M-071). Do not edit here.
+# Builds the agent CA's CRL (tools/jobs/crl-build.php) and reloads Apache so
+# 8443 uses it. Started daily by aio-crl.timer and on every revocation or
+# unrevocation by aio-crl.path. Runs as root only to read maint.cnf and the
+# agent CA key; no capabilities, and it can write only the CRL and its state.
+[Unit]
+Description=All In 1 Monitor: build the agent CA's CRL (M-071)
+After=mariadb.service
+Requires=mariadb.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/php @AIO_REPO@/tools/jobs/crl-build.php
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+ProtectSystem=strict
+ReadWritePaths=-/etc/aio-mothership/pki/public -/var/lib/aio-mothership/crl
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=yes
+LockPersonality=yes
+UMask=0022
+TimeoutStartSec=2min

@@ -12,12 +12,18 @@
 #   Step 3 (M-062): the ingest user's audit grant, and tools/enrol-check.php:
 #   a throwaway agent enrolled over HTTPS on 8443, used, refused, revoked
 #   and removed.
+#   Step 9 (M-071): the agent CA's CRL: aio-crl.service (the root job
+#   tools/jobs/crl-build.php), aio-crl.timer (daily), aio-crl.path (on every
+#   revocation), the request file the dashboard may write, and the 8443
+#   include that makes Apache check it. Checked live by enrol-check.php: a
+#   revoked agent's certificates are refused in the TLS handshake.
 #
 # Needs sudo: yes (run as aioadmin with sudo). Reboots: no.
 # Safe to re-run: yes. Run after a git pull and 09-app.sh (vendor/).
 # Usage: sudo bash setup/11-enrolment.sh
-# Requirements: MS-SEC-02, MS-SEC-03, MS-SEC-08, MS-SEC-10, MS-ING-06, M-002, M-021, M-037, M-059, M-061.
-# Run 06-mariadb.sh first after a pull that adds a migration (0005).
+# Requirements: MS-SEC-02, MS-SEC-03, MS-SEC-08, MS-SEC-10, MS-ING-06, M-002, M-021, M-037, M-059, M-061, M-071.
+# Run 06-mariadb.sh first after a pull that adds a migration (0005), and
+# 08-apache-php.sh after one that changes the 8443 vhost (M-071).
 
 source "$(dirname "$0")/lib.sh"
 need_root
@@ -130,6 +136,85 @@ check "a deployment token of 8 days is refused, nothing written (M-021)" tok_day
 check_not "the token CLI doesn't work without root (aio_maint, M-036)" tok_needs_root
 TOK=""
 
+# --- Step 9: the agent CA's CRL (MS-SEC-02, M-071, M-068) ---------------------------
+CRL="$AIO_ETC/pki/public/agent-ca.crl"
+CRL_STATE_DIR=/var/lib/aio-mothership/crl
+REQ_DIR=/var/lib/aio-mothership/crl-request
+REQ="$REQ_DIR/rebuild"
+CRL_INC="$AIO_ETC/apache/agent-crl.conf"
+grep -q 'IncludeOptional /etc/aio-mothership/apache/agent-crl.conf' /etc/apache2/sites-available/aio-agent-api.conf \
+    || die "the 8443 vhost has no CRL include yet; run 08-apache-php.sh first, then this again"
+install -d -m 0755 -o root -g root /var/lib/aio-mothership "$CRL_STATE_DIR" "$AIO_ETC/apache"
+# The dashboard pool may write the request file, and nothing else here (M-071).
+install -d -m 0750 -o root -g aio-dashboard "$REQ_DIR"
+[[ -f "$REQ" ]] || : > "$REQ"
+chown root:aio-dashboard "$REQ"; chmod 0660 "$REQ"
+CHANGED=0
+render aio-crl.service /etc/systemd/system/aio-crl.service && CHANGED=1 || true
+render aio-crl.timer /etc/systemd/system/aio-crl.timer && CHANGED=1 || true
+render aio-crl.path /etc/systemd/system/aio-crl.path && CHANGED=1 || true
+[[ $CHANGED -eq 1 ]] && systemctl daemon-reload
+info "building the CRL (a second or two)"
+if systemctl start aio-crl.service; then
+    journalctl -u aio-crl.service -n 2 --no-pager -o cat 2>/dev/null || true
+else
+    warn "aio-crl.service failed; see: journalctl -u aio-crl.service -n 20"
+fi
+# Apache checks the CRL only once one exists: an include naming a missing
+# file would stop Apache from starting.
+if [[ -s "$CRL" ]] && openssl crl -in "$CRL" -CAfile "$AIO_ETC/pki/public/agent-ca.crt" -noout 2>/dev/null; then
+    if render apache-aio-agent-crl.conf "$CRL_INC"; then
+        if apache2ctl configtest; then
+            systemctl reload apache2
+            info "8443 now checks agent certificates against the CRL"
+        else
+            rm -f "$CRL_INC"
+            warn "Apache's config test failed with the CRL include; removed it again, nothing reloaded"
+        fi
+    fi
+fi
+systemctl enable --quiet --now aio-crl.timer aio-crl.path
+
+crl_verifies() { openssl crl -in "$CRL" -CAfile "$AIO_ETC/pki/public/agent-ca.crt" -noout 2>&1 | grep -q 'verify OK'; }
+crl_days() {
+    local last next
+    last=$(date -d "$(openssl crl -in "$CRL" -noout -lastupdate | cut -d= -f2)" +%s)
+    next=$(date -d "$(openssl crl -in "$CRL" -noout -nextupdate | cut -d= -f2)" +%s)
+    (( (next - last) / 86400 == $(php -r 'require "'"$AIO_REPO"'/vendor/autoload.php"; echo Aio\Config::load()->int("crl", "valid_days");') ))
+}
+crl_state_ok() { php -r 'require "'"$AIO_REPO"'/vendor/autoload.php"; $s = Aio\Pki\CrlTrigger::fromConfig(Aio\Config::load())->status(time()); echo $s["message"], "\n"; exit($s["state"] === "ok" ? 0 : 1);'; }
+apache_loads_crl() { apache2ctl -t -D DUMP_INCLUDES 2>/dev/null | grep -q 'agent-crl.conf'; }
+pool_writes_req() { as aio-dashboard test -w "$REQ"; }
+pool_cant_add_files() { ! as aio-dashboard touch "$REQ_DIR/x" 2>/dev/null; }
+pool_cant_write_crl() { ! as aio-dashboard test -w "$CRL" && ! as aio-dashboard test -w "$CRL_STATE_DIR/state.json"; }
+build_ms() { php -r '$s = json_decode((string) @file_get_contents("/var/lib/aio-mothership/crl/state.json"), true); echo (int) ($s["build_ms"] ?? 0);'; }
+request_rebuilds() {
+    local before i
+    before=$(build_ms)
+    as aio-dashboard php -r 'require "'"$AIO_REPO"'/vendor/autoload.php"; Aio\Pki\CrlTrigger::fromConfig(Aio\Config::load())->request();' || return 1
+    for i in $(seq 1 60); do
+        [[ $(build_ms) -gt $before ]] && return 0
+        sleep 1
+    done
+    return 1
+}
+crl_log_clean() { ! journalctl -u aio-crl.service --since "$STARTED" --no-pager -o cat 2>/dev/null | grep -qE 'BEGIN|PRIVATE'; }
+
+echo
+check "the CRL verifies against the agent CA (M-071)" crl_verifies
+check "the CRL is valid for crl.valid_days (30, confirm, M-068)" crl_days
+check "the CRL's state is ok (dashboard and health page)" crl_state_ok
+check "CRL: 644 root:root" file_mode_is "$CRL" 644 root root
+check "8443 loads the CRL (Apache include)" apache_loads_crl
+check "aio-crl.timer (daily) is active" systemctl is-active --quiet aio-crl.timer
+check "aio-crl.path (on every revocation) is active" systemctl is-active --quiet aio-crl.path
+check "the dashboard pool may write the request file" pool_writes_req
+check "the dashboard pool can't add files beside it" pool_cant_add_files
+check "the dashboard pool can't write the CRL or its state" pool_cant_write_crl
+info "a rebuild request from the dashboard pool (up to 60 s)"
+check "a request from the dashboard pool starts a rebuild (aio-crl.path)" request_rebuilds
+check "the CRL job's log has no key (MS-SEC-10)" crl_log_clean
+
 # --- Step 3: POST /api/v1/enroll (MS-ING-06, M-062) ---------------------------------
 grants() { mariadb -N -e "SHOW GRANTS FOR 'aio_ingest'@'localhost'"; }
 ingest_audit_insert_only() { local g; g=$(grants | grep '`audit_log`'); [[ "$g" == *"GRANT INSERT ON"* ]] && [[ "$g" != *SELECT* && "$g" != *UPDATE* && "$g" != *DELETE* ]]; }
@@ -151,4 +236,5 @@ done < <(php "$AIO_REPO/tools/enrol-check.php" "https://$AIO_IP:8443" 2>&1; echo
 echo
 info "The signer's log: journalctl -u 'aio-signer@*' --since today"
 info "Tokens: sudo php bin/token-create.php list --all"
+info "The CRL: journalctl -u aio-crl.service -n 5; rebuild now: sudo systemctl start aio-crl.service"
 finish
